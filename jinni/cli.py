@@ -23,7 +23,7 @@ def main():
         epilog="""
 Examples:
   jinni ./my_project                  # Dump context of my_project to stdout
-  jinni --list-only ./my_project      # List files that would be included
+  jinni -l ./my_project               # List files that would be included
   jinni -o context.txt ./my_project   # Write context to context.txt
   jinni --config ../global.rules .    # Use global rules from ../global.rules
   jinni --debug-explain .             # Show reasons for inclusion/exclusion on stderr
@@ -40,7 +40,8 @@ Examples:
         help="Write output to a file instead of stdout."
     )
     parser.add_argument(
-        "--list-only",
+        "-l",
+        "--list",
         action="store_true",
         help="Only list file paths found, do not include content."
     )
@@ -50,6 +51,7 @@ Examples:
         help="Specify a global config file (using .contextfiles format). Applied before defaults."
     )
     parser.add_argument(
+        "-s",
         "--size-limit-mb",
         type=int,
         default=None, # Will use ENV or default if not provided
@@ -65,7 +67,7 @@ Examples:
     # --- Input Validation ---
     target_path = args.path # Rename for clarity
     output_file = args.output
-    list_only = args.list_only
+    list_only = args.list # Update variable assignment
     config_file = args.config
     size_limit_mb = args.size_limit_mb
     debug_explain = args.debug_explain

@@ -7,20 +7,21 @@ from pathlib import Path
 from typing import List, Optional, Any
 
 # Ensure jinni package is importable if running script directly
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent)) # RESTORED
 # Setup logger for the server
 logger = logging.getLogger("jinni.server")
 # Configure basic logging if no handlers are configured (e.g., when run directly)
 if not logger.handlers and not logging.getLogger().handlers:
      logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Restored conditional basicConfig above
 
 # --- New MCP Imports ---
 from mcp.server.fastmcp import FastMCP, Context
-# StdioTransport import removed, assuming FastMCP handles it implicitly via run()
+# Removed incorrect StdioTransport import
 
 # --- Core Logic Imports ---
 from jinni.core_logic import process_directory, ContextSizeExceededError, DEFAULT_SIZE_LIMIT_MB, ENV_VAR_SIZE_LIMIT # Keep custom exception
-from jinni.core_logic import process_directory, ContextSizeExceededError, DEFAULT_SIZE_LIMIT_MB, ENV_VAR_SIZE_LIMIT # Keep custom exception
+# Removed duplicate import on next line
 
 # --- Server Definition ---
 # FastMCP uses the server name passed here. Description/version might be inferred or set elsewhere.
@@ -28,7 +29,7 @@ server = FastMCP("jinni")
 
 # --- Tool Definition ---
 @server.tool()
-async def read_context(
+async def read_context( # Add log here
     path: str,
     rules: Optional[List[str]] = None,
     list_only: bool = False,
@@ -36,6 +37,7 @@ async def read_context(
     debug_explain: bool = False,
     ctx: Context = None # Add context for potential future use (e.g., progress reporting)
 ) -> str:
+    logger.info("--- read_context tool invoked ---") # Add prominent log
     logger.debug(f"Received read_context request: path='{path}', list_only={list_only}, rules={rules}, debug_explain={debug_explain}") # Keep as DEBUG
     """
     Generates a concatenated view of relevant code files from a specified directory,
@@ -86,8 +88,12 @@ async def read_context(
 # --- Main Execution Block ---
 if __name__ == "__main__":
     # Setup and run the server with StdioTransport
-    # transport = StdioTransport() # Removed - Assuming FastMCP handles stdio implicitly
-    # server.add_transport(transport) # Removed - Assuming FastMCP handles stdio implicitly
-    logger.debug("Starting Jinni MCP Server via Stdio...") # Change INFO to DEBUG
-    server.run() # Run the server (should use the added transport)
+    # transport = StdioTransport() # Removed explicit transport setup
+    # server.add_transport(transport) # Removed explicit transport setup
+    logger.info("--- Jinni MCP Server: About to call server.run() ---") # Keep log
+    try:
+        server.run() # Run the server (FastMCP should handle stdio implicitly)
+    except Exception as e:
+        logger.critical(f"!!! Exception during server.run(): {e}", exc_info=True) # Add try/except around run
+        sys.exit(1)
     logger.debug("Jinni MCP Server stopped.") # Change INFO to DEBUG
