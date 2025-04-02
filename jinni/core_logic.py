@@ -107,7 +107,7 @@ def process_directory(
             dir_full_path = current_dir_path / dname
             # Removed check: if dir_full_path.is_dir():
             # Rely on os.walk providing valid dirs and check_item for filtering.
-            included, reason = check_item(dir_full_path, root_path, inline_rules, global_rules, contextfile_cache)
+            included, reason = check_item(dir_full_path, root_path, inline_rules, global_rules, contextfile_cache, explain_mode=debug_explain) # Pass flag
             if debug_explain:
                 rel_dir_path = dir_full_path.relative_to(root_path)
                 # Use logger instead of print for debug explain
@@ -123,7 +123,7 @@ def process_directory(
             # Rely on os.walk providing valid files and check_item for filtering.
 
             # Check if file should be included by rules
-            included, reason = check_item(file_full_path, root_path, inline_rules, global_rules, contextfile_cache)
+            included, reason = check_item(file_full_path, root_path, inline_rules, global_rules, contextfile_cache, explain_mode=debug_explain) # Pass flag
             relative_path = file_full_path.relative_to(root_path) # Get relative path regardless for debug output
             relative_path_str = str(relative_path).replace(os.sep, '/')
             if debug_explain:

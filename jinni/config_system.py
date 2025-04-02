@@ -146,7 +146,8 @@ def check_item(
     root_path: Path,
     inline_rules: Optional[Ruleset] = None,
     global_rules: Optional[Ruleset] = None,
-    contextfile_cache: Optional[RuleCache] = None
+    contextfile_cache: Optional[RuleCache] = None,
+    explain_mode: bool = False # New flag to control detailed logging
 ) -> CheckResult:
     """
     Checks if an item should be included based on the full rule hierarchy.
@@ -180,8 +181,8 @@ def check_item(
     global_match: Optional[CheckResult] = None
     default_match: Optional[CheckResult] = None
 
-    # Helper function remains the same as before
-    def _find_match_in_ruleset(rules: Optional[Ruleset], source_name: str, path_to_match: str, context_dir: Optional[Path] = None) -> Optional[CheckResult]:
+    # Helper function now accepts explain_mode
+    def _find_match_in_ruleset(rules: Optional[Ruleset], source_name: str, path_to_match: str, context_dir: Optional[Path] = None, explain_mode: bool = False) -> Optional[CheckResult]:
         logger.debug(f"Checking item path '{path_to_match}' against ruleset from '{source_name}' (Context Dir: {context_dir})")
         if not rules:
             return None
@@ -219,20 +220,20 @@ def check_item(
                (not is_dir_pattern):
                  # Use fnmatch for glob matching
                  match_result = fnmatch.fnmatch(item_match_path, match_pattern)
-                 logger.debug(f"  Rule='{pattern}' ({rule_type}), ItemPath='{item_match_path}', MatchPattern='{match_pattern}', IsDir={is_dir}, IsDirPattern={is_dir_pattern} -> fnmatch result: {match_result}")
+                 if explain_mode: logger.debug(f"  Rule='{pattern}' ({rule_type}), ItemPath='{item_match_path}', MatchPattern='{match_pattern}', IsDir={is_dir}, IsDirPattern={is_dir_pattern} -> fnmatch result: {match_result}")
                  if match_result:
                     # If pattern was for a dir, ensure item is actually a dir
                     if is_dir_pattern and not is_dir:
-                        logger.debug(f"    Dir pattern '{pattern}' cannot match file '{item_match_path}'. Skipping.")
+                        if explain_mode: logger.debug(f"    Dir pattern '{pattern}' cannot match file '{item_match_path}'. Skipping.")
                         continue # Dir pattern cannot match a file
 
                     # This is the last matching rule within this specific ruleset
                     included = rule_type == RULE_INCLUDE
                     reason = f"{'Included' if included else 'Excluded'} by {source_name}: '{pattern}'"
                     match_found = (included, reason)
-                    logger.debug(f"    Match found! Result: {match_found}")
+                    if explain_mode: logger.debug(f"    Match found! Result: {match_found}")
                     break # Stop checking this ruleset once the last match is found
-        if not match_found:
+        if not match_found and explain_mode:
              logger.debug(f"  No match found for ruleset '{source_name}'")
         return match_found
 
@@ -240,7 +241,7 @@ def check_item(
     # Store the match from each level if found.
 
     # 1. Check Inline Rules (Highest Precedence)
-    inline_match = _find_match_in_ruleset(inline_rules, "Inline Rule", pattern_to_match)
+    inline_match = _find_match_in_ruleset(inline_rules, "Inline Rule", pattern_to_match, explain_mode=explain_mode)
 
     # 2. Check .contextfiles (Closest first)
     # We only care about the match from the *closest* contextfile where a rule matches.
@@ -251,7 +252,7 @@ def check_item(
         if ruleset:
              contextfile_rel_path = current_dir.relative_to(abs_root_path) / ".contextfiles"
              source_name = f"Local Rule ({str(contextfile_rel_path).replace(os.sep, '/')})"
-             match_in_this_dir = _find_match_in_ruleset(ruleset, source_name, pattern_to_match, context_dir=current_dir)
+             match_in_this_dir = _find_match_in_ruleset(ruleset, source_name, pattern_to_match, context_dir=current_dir, explain_mode=explain_mode)
              if match_in_this_dir is not None:
                  local_match = match_in_this_dir # Store the match from the closest file
                  break # Stop walking up once the closest match is found
@@ -261,10 +262,10 @@ def check_item(
         current_dir = current_dir.parent # Move up one directory
 
     # 3. Check Global Rules
-    global_match = _find_match_in_ruleset(global_rules, "Global Rule", pattern_to_match)
+    global_match = _find_match_in_ruleset(global_rules, "Global Rule", pattern_to_match, explain_mode=explain_mode)
 
     # 4. Check Default Exclusions (Lowest Precedence)
-    default_match = _find_match_in_ruleset(DEFAULT_EXCLUDE_RULESET, "Default Rule", pattern_to_match)
+    default_match = _find_match_in_ruleset(DEFAULT_EXCLUDE_RULESET, "Default Rule", pattern_to_match, explain_mode=explain_mode)
 
     # 5. Determine final result based on precedence, prioritizing exclusions
     if inline_match is not None:
