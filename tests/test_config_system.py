@@ -99,21 +99,21 @@ class TestConfigSystemHierarchy(unittest.TestCase):
 
     def test_default_exclusions(self):
         """Test that default exclusions work (e.g., .git, hidden files)."""
-        # Use the imported check_item
-        self.assertFalse(check_item(self.root_path / ".git" / "config", self.root_path, contextfile_cache=self.cache), ".git/config should be excluded")
-        self.assertFalse(check_item(self.root_path / ".git", self.root_path, contextfile_cache=self.cache), ".git dir should be excluded")
-        self.assertFalse(check_item(self.root_path / ".hidden_file", self.root_path, contextfile_cache=self.cache), ".hidden_file should be excluded")
+        # Use the imported check_item - check the boolean part of the tuple
+        self.assertFalse(check_item(self.root_path / ".git" / "config", self.root_path, contextfile_cache=self.cache)[0], ".git/config should be excluded")
+        self.assertFalse(check_item(self.root_path / ".git", self.root_path, contextfile_cache=self.cache)[0], ".git dir should be excluded") # Check boolean part
+        self.assertFalse(check_item(self.root_path / ".hidden_file", self.root_path, contextfile_cache=self.cache)[0], ".hidden_file should be excluded")
 
 
     def test_root_contextfile_exclusion(self):
         """Test exclusion rule in root .contextfiles."""
-        # Use the imported check_item
-        self.assertFalse(check_item(self.root_path / "skip_default.log", self.root_path, contextfile_cache=self.cache), "*.log should be excluded by root .contextfiles")
+        # Use the imported check_item - check the boolean part of the tuple
+        self.assertFalse(check_item(self.root_path / "skip_default.log", self.root_path, contextfile_cache=self.cache)[0], "*.log should be excluded by root .contextfiles")
 
     def test_sub_contextfile_exclusion(self):
         """Test exclusion rule in subdirectory .contextfiles."""
-        # Use the imported check_item
-        self.assertFalse(check_item(self.root_path / "sub" / "file_sub.txt", self.root_path, contextfile_cache=self.cache), "file_sub.txt should be excluded by sub/.contextfiles")
+        # Use the imported check_item - check the boolean part of the tuple
+        self.assertFalse(check_item(self.root_path / "sub" / "file_sub.txt", self.root_path, contextfile_cache=self.cache)[0], "file_sub.txt should be excluded by sub/.contextfiles")
 
     def test_root_contextfile_inclusion(self):
         """Test inclusion rule in root .contextfiles applying to subdirectory."""

@@ -175,3 +175,4 @@ cython_debug/
 
 # Project specific
 dev-reference/
+jinni_debug.log

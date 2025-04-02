@@ -21,4 +21,6 @@ This file tracks the project's progress using a task list format.
 
 *   Run & Refine Unit Tests (Task 2/3).
 *   Finalize Documentation (Task 6).
-*   [2025-04-02 19:30:16] - Task 7: Implement Integration Tests (High Priority) - Create system-level tests for CLI and MCP server, verifying core functionality (filtering, `.contextfiles`, output) using temporary directory structures.
+*   [2025-04-02 19:30:16] - Task 7: Implement Integration Tests (High Priority) - Initial CLI and MCP tests implemented (`tests/test_integration.py`), covering basic invocation, `.contextfiles`, `--list-only`, `--config`, and inline MCP rules.
+*   [2025-04-02 19:52:56] - Task 8: Implement Binary File Detection - Add logic to identify and optionally skip files detected as binary content.
+*   [2025-04-02 19:52:56] - Task 9: Implement Debug Explain Option - Add a CLI flag and MCP argument to output the reasoning behind including/excluding each file/directory.
