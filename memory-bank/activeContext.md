@@ -7,7 +7,7 @@
 
 ## Current Focus
 
-*   [2025-04-02 19:30:29] - README documentation updated (Task 6). New high-priority Task 7 (Integration Tests) added. Focus shifts to Task 7.
+*   [2025-04-03 16:27:00] - Current focus is implementing the approved redesign of `core_logic.py` to fix directory exclusion during traversal. This takes precedence over Task 10 (multi-path CLI).
 
 ## Recent Changes
 
@@ -25,10 +25,13 @@
 *   [2025-04-02 19:14:20] - Code mode created initial `jinni/cli.py` implementing the command-line interface based on DESIGN.md (Task 5).
 *   [2025-04-02 19:29:52] - Completed initial update of README.md (Task 6).
 *   [2025-04-02 19:30:16] - Added Task 7: Implement Integration Tests (High Priority) based on user feedback.
+*   [2025-04-03 16:27:00] - Approved plan to redesign `core_logic.py` directory traversal logic. Updated `decisionLog.md`.
 
 ## Open Questions/Issues
 *   [2025-04-02 19:16:35] - Feature Request: Allow CLI to accept multiple directory/file paths as positional arguments, avoiding duplicate output.
 *   [2025-04-02 19:16:35] - Feature Request: Add new MCP tool `read_context_list` to handle multiple paths and avoid duplicates, similar to the CLI request.
 *   [2025-04-02 19:29:52] - Architectural Question: Should distribution/installation shift from Python/`pip` to Node.js/`npm`/`npx` as suggested by user? Requires discussion/decision.
 *
+*   [2025-04-03 14:00:02] - Feature Request: Add CLI option to automatically copy output to clipboard.
+*   [2025-04-03 14:48:50] - Debugging `jinni_debug.log` inclusion issue paused. Requires `--debug-explain` output analysis.
 *

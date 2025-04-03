@@ -43,7 +43,7 @@ class TestCoreLogicFormatting(unittest.TestCase):
         ]
 
         # Call the actual implementation function
-        result = process_directory(self.test_dir, list_only=False) # Use real temp dir
+        result, _ = process_directory(root_path_str=str(self.root_path), output_rel_root_str=str(self.root_path), processing_target_str=str(self.root_path), processed_files_set=set(), list_only=False) # Use real temp dir
 
         # Define expected output
         sep = "\n\n" + "=" * 80 + "\n"
@@ -58,7 +58,7 @@ class TestCoreLogicFormatting(unittest.TestCase):
         self.assertEqual(result.strip(), expected_output.strip())
         # Check that check_item was called (adjust count based on actual walk)
         # Expected calls: sub/, file1.txt, binary.bin, sub/file2.py
-        self.assertEqual(mock_check.call_count, 4)
+        self.assertEqual(mock_check.call_count, 4) # Check files + sub dir: file1.txt, binary.bin, sub/, sub/file2.py
         # Check get_file_info calls (only for non-binary included files)
         self.assertEqual(mock_getinfo.call_count, 2)
 
@@ -67,7 +67,7 @@ class TestCoreLogicFormatting(unittest.TestCase):
         """Test the output format when list_only is True."""
 
         # Call the actual implementation function
-        result = process_directory(self.test_dir, list_only=True) # Use real temp dir
+        result, _ = process_directory(root_path_str=str(self.root_path), output_rel_root_str=str(self.root_path), processing_target_str=str(self.root_path), processed_files_set=set(), list_only=True) # Use real temp dir
 
         # Expected output based on files created in setUp (binary.bin is skipped)
         expected_output = "file1.txt\nsub/file2.py"
@@ -75,7 +75,7 @@ class TestCoreLogicFormatting(unittest.TestCase):
         self.assertEqual(result.strip(), expected_output.strip())
         # Check that check_item was called (adjust count based on actual walk)
         # Expected calls: sub/, file1.txt, binary.bin, sub/file2.py
-        self.assertEqual(mock_check.call_count, 4)
+        self.assertEqual(mock_check.call_count, 4) # Check files + sub dir: file1.txt, binary.bin, sub/, sub/file2.py
 
 # Add more tests for formatting edge cases, empty files, etc. later
 

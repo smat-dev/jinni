@@ -13,7 +13,7 @@ This file tracks the project's progress using a task list format.
 ## Current Tasks
 
 *   [2025-04-02 18:46:33] - Task 2: Develop Tests (Unit tests for Core Logic & Config; Integration test setup) - Initial tests written (`tests/`) and passing after debug fixes [2025-04-02 19:07:54]. Integration test setup pending.
-*   [2025-04-02 18:53:40] - Task 3: Implement Core Logic & Configuration System - Initial implementation created (`jinni/`) and passing initial unit tests after debug fixes [2025-04-02 19:07:54].
+*   [2025-04-02 18:53:40] - Task 3: Implement Core Logic & Configuration System - Initial implementation created (`jinni/`) and passing initial unit tests after debug fixes [2025-04-02 19:07:54]. [2025-04-03 16:29:00] - Implemented directory pruning logic in `core_logic.py`'s `os.walk` loop to correctly handle exclusions.
 *   [2025-04-02 19:13:08] - Task 4: Implement `jinni` MCP Server - Initial implementation created (`jinni/server.py`). Testing pending.
 *   [2025-04-02 19:14:20] - Task 5: Implement `jinni` CLI - Initial implementation created (`jinni/cli.py`). Testing pending.
 
@@ -24,3 +24,4 @@ This file tracks the project's progress using a task list format.
 *   [2025-04-02 19:30:16] - Task 7: Implement Integration Tests (High Priority) - Initial CLI and MCP tests implemented (`tests/test_integration.py`), covering basic invocation, `.contextfiles`, `--list-only`, `--config`, and inline MCP rules.
 *   [2025-04-02 19:52:56] - Task 8: Implement Binary File Detection - Add logic to identify and optionally skip files detected as binary content.
 *   [2025-04-02 19:52:56] - Task 9: Implement Debug Explain Option - Add a CLI flag and MCP argument to output the reasoning behind including/excluding each file/directory.
+*   [2025-04-03 14:48:31] - Task 10: Implement Multi-Path CLI Input - Modify CLI and core logic to accept multiple file/directory paths as input. (Pivoting focus to this task).

@@ -1,0 +1,38 @@
+{
+  "name": "jinni",
+  "version": "0.1.0",
+  "description": "Bring Your Project Into LLM Context",
+  "bin": {
+    "jinni": "bin/cli.js",
+    "jinni-server": "bin/server.js"
+  },
+  "main": "bin/cli.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "files": [
+    "bin",
+    "jinni"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smat-dev/jinni.git"
+  },
+  "keywords": [
+    "mcp",
+    "llm",
+    "context",
+    "cli",
+    "tool"
+  ],
+  "author": "smat-dev",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/smat-dev/jinni/issues"
+  },
+  "homepage": "https://github.com/smat-dev/jinni#readme"
+}

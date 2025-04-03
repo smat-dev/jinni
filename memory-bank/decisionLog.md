@@ -14,12 +14,14 @@ This file records architectural and implementation decisions using a list format
     *   Symbolic links will be skipped.
     *   CLI `--config` flag provides global rules applied before defaults and `.contextfiles`.
 *   [2025-04-02 18:45:42] - Further refined `read_context` tool design: reverted to single `path` argument but kept optional inline `rules` argument.
+*   [2025-04-03 16:26:00] - Approved plan to redesign `core_logic.py` to correctly prune directory traversal using `check_item` on directories within the `os.walk` loop.
 
 ## Rationale
 
 *   The plan provides a clear roadmap based on initial context gathering and user feedback, outlining core components and ordered tasks (Design/Docs -> Tests -> Implementation).
 *   Aborting on size limit is safer than potentially providing incomplete context. `read_context` is a more descriptive tool name. Skipping symlinks is a safer default. Global config provides flexibility.
 *   Keeping a single root path simplifies the core logic while inline rules still allow flexible configuration directly from the MCP client if needed, balancing simplicity and power.
+*   [2025-04-03 16:26:00] - Current `core_logic.py` implementation traverses into directories before checking exclusion rules, leading to incorrect behavior (e.g., entering `node_modules`). Checking directories within `os.walk` (using `topdown=True`) and pruning `dirnames` is the standard way to prevent unwanted traversal.
 
 ## Implementation Details
 
@@ -29,3 +31,4 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-02 19:29:52] - User feedback suggests shifting distribution/installation from Python/`pip` to Node.js/`npm`/`npx`. This requires architectural review.
 *   [2025-04-02 19:52:56] - Refactored default exclusion logic in `config_system.py` to use a unified glob pattern list (`DEFAULT_EXCLUDE_RULESET`) instead of separate sets/regex, integrating it into the standard rule precedence check (`check_item`). This simplifies the system and makes defaults behave consistently with other rules.
 *   [2025-04-02 19:29:52] - User feedback suggests shifting distribution/installation from Python/`pip` to Node.js/`npm`/`npx`. This requires architectural review.
+*   [2025-04-03 16:26:00] - Modify the `os.walk` loop in `jinni/core_logic.py` to iterate through `dirnames`, call `check_item` for each directory path, and remove the directory name from the original `dirnames` list if `check_item` returns `False`.

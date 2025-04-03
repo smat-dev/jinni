@@ -1,3 +1,5 @@
+<img src="assets/jinni_banner_1280x640.png" alt="Jinni Banner" width="400"/>
+
 # Jinni: Bring Your Project Into LLM Context
 
 Jinni is a tool designed to help Large Language Models (LLMs) efficiently understand the context of your software projects. It provides a consolidated view of relevant project files, overcoming the limitations and inefficiencies of reading files one by one.
@@ -37,26 +39,27 @@ Jinni achieves this through two main components: an MCP (Model Context Protocol)
 
 1.  **Setup:** Configure your MCP client (e.g., Claude Desktop's `claude_desktop_config.json`) to run the `jinni` server executable.
 2.  **Invocation:** When interacting with your LLM via the MCP client, the model can invoke the `read_context` tool.
-    *   **`path` (string, required):** The absolute path to the project directory to analyze.
+    *   **`path` (string, required):** The absolute path to the project directory to analyze. This path is used as the base for finding `.contextfiles`.
+    *   **`root` (string, optional):** An absolute path *within* `path` to constrain the processing. If provided, only files/directories under this `root` will be walked and included. Defaults to `path`.
     *   **`rules` (array of strings, optional):** A list of inline filtering rules (using `.contextfiles` syntax, e.g., `["!*.tmp", "include_this/"]`). These rules have the highest precedence, overriding any found in `.contextfiles` or global configs.
     *   **`list_only` (boolean, optional):** If true, returns only the list of relative file paths instead of content.
 3.  **Output:** The tool returns a single string containing the concatenated content (with headers) or the file list.
 
-*(Detailed server setup instructions will vary depending on your MCP client. Generally, you need to configure the client to execute the `jinni` server script. For example, in a hypothetical `mcp_client_config.json`):*
+*(Detailed server setup instructions will vary depending on your MCP client. Generally, you need to configure the client to execute the `jinni-server` command. For example, in Claude Desktop's `claude_desktop_config.json`):*
 
 ```json
 {
-  "servers": [
-    {
-      "name": "jinni-context-server",
-      "command": ["python", "-m", "jinni.server"], // Or the path to your jinni server executable/script
-      "transport": "stdio"
+  "mcpServers": {
+    "jinni": {
+      "command": "jinni-server"
+      // Note: You can optionally start the server to only read files from a specific directory tree (recommended for security/safety):
+      // "command": "jinni-server --root /absolute/path/"
     }
-  ]
+  }
 }
 ```
 
-*Consult your specific MCP client's documentation for precise setup steps.*
+*Consult your specific MCP client's documentation for precise setup steps. Ensure `jinni-server` (installed via `npm install -g jinni`) is accessible in your system's PATH.*
 
 ### Command-Line Utility (`jinni` CLI)
 
@@ -71,12 +74,18 @@ jinni [OPTIONS] <PATH>
 
 ### Installation
 
-*(Assuming standard Python packaging)*
+You can install Jinni globally using npm:
 
 ```bash
-pip install .  # From the project root directory
-# Or, if distributed via PyPI:
-# pip install jinni-context-tool
+npm install -g jinni
+```
+
+This will make the `jinni` CLI and `jinni-server` MCP server command available in your system PATH.
+
+Alternatively, you can run the CLI directly without global installation using `npx`:
+
+```bash
+npx jinni [OPTIONS] <PATH>
 ```
 
 ### Examples
@@ -110,7 +119,7 @@ You can customize Jinni's filtering behavior by placing a file named `.contextfi
 *   **Exclusion Rules:** Lines starting with `!` exclude matching files/directories (e.g., `!*.log`, `!temp/`).
 *   **Inclusion Rules:** All other non-comment lines include matching files/directories, potentially overriding broader exclusions or defaults (e.g., `important.log`, `src/`).
 *   **Patterns:** Rules use standard [glob patterns](https://docs.python.org/3/library/fnmatch.html). Patterns ending with `/` match directories only. Patterns match relative paths from the directory containing the `.contextfiles`.
-*   **Hierarchy:** Inline rules (from MCP tool call) > Subdirectory `.contextfiles` > Parent Directory `.contextfiles` > Global Config (`--config` CLI option) > Default Exclusions. Within the same rule source, `!` exclusions override inclusions.
+*   **Hierarchy:** Inline rules (from MCP tool call) > Subdirectory `.contextfiles` > Parent Directory `.contextfiles` > Global Config (`--config` CLI option) > Default Exclusions. Within the same rule source, later rules take precedence over earlier rules. 
 
 ### Examples
 

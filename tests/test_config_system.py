@@ -124,7 +124,17 @@ class TestConfigSystemHierarchy(unittest.TestCase):
         """Test that files with no matching rules are included by default."""
         # Use the imported check_item
         self.assertTrue(check_item(self.root_path / "sub" / "subsub" / "file_subsub.txt", self.root_path, contextfile_cache=self.cache), "file_subsub.txt should be included as no rules match")
-        self.assertTrue(check_item(self.root_path / "file_root.txt", self.root_path, contextfile_cache=self.cache), "file_root.txt should be included as no rules match")
+        self.assertTrue(check_item(self.root_path / "file_root.txt", self.root_path, contextfile_cache=self.cache)[0], "file_root.txt should be included as no rules match")
+
+    def test_default_exclusion_root_log_file(self):
+        """Test that a .log file in the root is excluded by default **/*.log rule."""
+        # Create a dummy log file directly in the root
+        log_file_path = self.root_path / "my_root.log"
+        log_file_path.touch()
+        # Use the imported check_item - check the boolean part of the tuple
+        included, reason = check_item(log_file_path, self.root_path, contextfile_cache=self.cache, explain_mode=True)
+        print(f"Check result for {log_file_path.name}: Included={included}, Reason='{reason}'") # Add print for debugging in test output
+        self.assertFalse(included, f"Root file {log_file_path.name} should be excluded by default rules, but reason was: {reason}")
 
     # --- Tests for Inline/Global Rules (Add later once basic hierarchy works) ---
     # def test_inline_rule_overrides_contextfile(self): ...

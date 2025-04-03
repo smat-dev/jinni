@@ -21,7 +21,7 @@ RULE_EXCLUDE = 'exclude'
 # Users can override these with global, local, or inline rules.
 DEFAULT_EXCLUDE_RULESET: 'Ruleset' = [
     # Version Control Systems & Files
-    # (RULE_EXCLUDE, "**/.git/"), # Rely on hidden pattern below
+    (RULE_EXCLUDE, "**/.git/"),
     (RULE_EXCLUDE, "**/.svn/"),
     (RULE_EXCLUDE, "**/.hg/"),
     (RULE_EXCLUDE, "**/.bzr/"),
@@ -159,6 +159,11 @@ def check_item(
     if contextfile_cache is None:
         contextfile_cache = {} # Initialize cache if not provided
 
+    # --- Symlink Check ---
+    # Skip symlinks early, before resolving, as per design
+    if item_path.is_symlink():
+        return False, "Excluded: Item is a symbolic link"
+
     # Ensure paths are absolute for reliable comparison and cache keys
     abs_item_path = item_path.resolve()
     abs_root_path = root_path.resolve()
@@ -181,58 +186,87 @@ def check_item(
     global_match: Optional[CheckResult] = None
     default_match: Optional[CheckResult] = None
 
-    # Helper function now accepts explain_mode
-    def _find_match_in_ruleset(rules: Optional[Ruleset], source_name: str, path_to_match: str, context_dir: Optional[Path] = None, explain_mode: bool = False) -> Optional[CheckResult]:
-        logger.debug(f"Checking item path '{path_to_match}' against ruleset from '{source_name}' (Context Dir: {context_dir})")
+    # --- Refactored Helper Function ---
+    def _find_match_in_ruleset(
+        rules: Optional[Ruleset],
+        source_name: str,
+        # Explicit paths needed for correct relativity:
+        item_abs_path: Path,
+        item_is_dir: bool,
+        root_abs_path: Path,
+        context_dir_abs_path: Optional[Path], # Absolute path of the dir containing the ruleset, if local
+        explain_mode: bool = False
+    ) -> Optional[CheckResult]:
+        # This function now takes absolute paths and calculates the correct relative path for matching.
+        logger.debug(f"Checking item '{item_abs_path}' against ruleset from '{source_name}' (Context Dir: {context_dir_abs_path})")
         if not rules:
             return None
-        match_found: Optional[CheckResult] = None
-        for rule_type, pattern in reversed(rules): # Last rule in file has highest precedence for this level
-            # Determine the correct path string to match against
-            current_path_to_match = path_to_match # Default: path relative to root
-            if context_dir: # For local rules, match relative to the contextfile's directory
+
+        # Determine the relative path string to use for matching this specific ruleset
+        path_for_match: Optional[str] = None
+        if context_dir_abs_path:
+            # Local rule: path relative to the contextfile's directory
+            try:
+                rel_path = item_abs_path.relative_to(context_dir_abs_path)
+                path_for_match = str(rel_path).replace(os.sep, '/')
+            except ValueError:
+                # Item not under context dir. A local rule shouldn't match based on relative path.
+                # However, a pattern like '!sub/*' in root could be intended to match 'sub/file' when checked from root.
+                # Let's try root-relative path as fallback for local rules if context-relative fails.
+                # This handles cases where local rules might use patterns relative to the root.
                 try:
-                    # Need absolute path of item for relative_to
-                    rel_path = abs_item_path.relative_to(context_dir.resolve())
-                    current_path_to_match = str(rel_path).replace(os.sep, '/')
-                    if is_dir:
-                        current_path_to_match += '/'
+                    rel_path_from_root = item_abs_path.relative_to(root_abs_path)
+                    path_for_match = str(rel_path_from_root).replace(os.sep, '/')
+                    logger.debug(f"  Item not in context dir {context_dir_abs_path}, using root-relative path '{path_for_match}' for matching local rule.")
                 except ValueError:
-                    # Item not in or below context_dir, this rule doesn't apply directly
-                    # This can happen if matching root patterns from a subdir contextfile
-                    # Use the original path_to_match (relative to root) in this case
-                    current_path_to_match = path_to_match
+                    logger.warning(f"  Item {item_abs_path} not relative to context {context_dir_abs_path} or root {root_abs_path}. Cannot match.")
+                    return None # Cannot determine path to match against
+        else:
+            # Global/Default/Inline rule: path relative to the project root
+            try:
+                rel_path = item_abs_path.relative_to(root_abs_path)
+                path_for_match = str(rel_path).replace(os.sep, '/')
+            except ValueError:
+                logger.warning(f"  Item {item_abs_path} not relative to root {root_abs_path}. Cannot match global/default/inline.")
+                return None # Cannot determine path to match against
 
-            # Check if pattern type matches item type or pattern is generic
-            # Handle directory patterns ('/'), file patterns (no '/'), and generic patterns
+        # Ensure path_for_match has trailing slash if item is a directory for consistent matching
+        if item_is_dir and not path_for_match.endswith('/'):
+            path_for_match += '/'
+
+        match_found: Optional[CheckResult] = None
+        for rule_type, pattern in reversed(rules): # Last rule in file has highest precedence
             is_dir_pattern = pattern.endswith('/')
-            # Adjust pattern for matching if it's a dir pattern
-            match_pattern = pattern[:-1] if is_dir_pattern else pattern
-            # Adjust item path for matching if it's a dir
-            item_match_path = current_path_to_match[:-1] if is_dir and current_path_to_match.endswith('/') else current_path_to_match
+            match_result = False
 
+            # Simpler matching logic: Rely on fnmatch and correctly formatted path_str_for_match
+            path_str_for_match = path_for_match
+            if item_is_dir and not path_str_for_match.endswith('/'):
+                path_str_for_match += '/'
+            elif not item_is_dir and path_str_for_match.endswith('/'): # Safety check
+                path_str_for_match = path_str_for_match.rstrip('/')
 
-            # 1. Pattern is for a directory, item is a directory
-            # 2. Pattern is for a file, item is a file
-            # 3. Pattern is generic (no '/'), item can be file or dir
-            if (is_dir_pattern and is_dir) or \
-               (not is_dir_pattern and not is_dir) or \
-               (not is_dir_pattern):
-                 # Use fnmatch for glob matching
-                 match_result = fnmatch.fnmatch(item_match_path, match_pattern)
-                 if explain_mode: logger.debug(f"  Rule='{pattern}' ({rule_type}), ItemPath='{item_match_path}', MatchPattern='{match_pattern}', IsDir={is_dir}, IsDirPattern={is_dir_pattern} -> fnmatch result: {match_result}")
-                 if match_result:
-                    # If pattern was for a dir, ensure item is actually a dir
-                    if is_dir_pattern and not is_dir:
-                        if explain_mode: logger.debug(f"    Dir pattern '{pattern}' cannot match file '{item_match_path}'. Skipping.")
-                        continue # Dir pattern cannot match a file
+            # Perform match using fnmatch - it handles **, *, ?, leading dots.
+            match_result = fnmatch.fnmatch(path_str_for_match, pattern)
 
-                    # This is the last matching rule within this specific ruleset
-                    included = rule_type == RULE_INCLUDE
-                    reason = f"{'Included' if included else 'Excluded'} by {source_name}: '{pattern}'"
-                    match_found = (included, reason)
-                    if explain_mode: logger.debug(f"    Match found! Result: {match_found}")
-                    break # Stop checking this ruleset once the last match is found
+            # Post-fnmatch check: Prevent non-directory patterns matching directories by basename
+            # e.g., prevent pattern "build" matching directory "build/"
+            # Post-fnmatch check: Prevent non-directory patterns matching directories by basename
+            # e.g., prevent pattern "build" matching directory "build/"
+            if not is_dir_pattern and item_is_dir and match_result:
+                basename = os.path.basename(path_str_for_match.rstrip('/'))
+                if pattern == basename:
+                    if explain_mode: logger.debug(f"    Pattern '{pattern}' is file pattern, item '{path_str_for_match}' is dir with matching basename. Overriding match to False.")
+                    match_result = False # Override match if file pattern matches dir basename
+
+            # If a match was determined (and potentially overridden), record it and stop checking this ruleset
+            if match_result:
+                included = rule_type == RULE_INCLUDE
+                reason = f"{'Included' if included else 'Excluded'} by {source_name}: '{pattern}'"
+                match_found = (included, reason)
+                if explain_mode: logger.debug(f"    Match found! Result: {match_found}")
+                break # Stop checking this ruleset
+
         if not match_found and explain_mode:
              logger.debug(f"  No match found for ruleset '{source_name}'")
         return match_found
@@ -240,8 +274,12 @@ def check_item(
     # --- Check precedence levels ---
     # Store the match from each level if found.
 
-    # 1. Check Inline Rules (Highest Precedence)
-    inline_match = _find_match_in_ruleset(inline_rules, "Inline Rule", pattern_to_match, explain_mode=explain_mode)
+    # 1. Check Inline Rules (Highest Precedence) - Use root-relative matching
+    inline_match = _find_match_in_ruleset(
+        inline_rules, "Inline Rule",
+        item_abs_path=abs_item_path, item_is_dir=is_dir, root_abs_path=abs_root_path,
+        context_dir_abs_path=None, explain_mode=explain_mode
+    )
 
     # 2. Check .contextfiles (Closest first)
     # We only care about the match from the *closest* contextfile where a rule matches.
@@ -252,7 +290,12 @@ def check_item(
         if ruleset:
              contextfile_rel_path = current_dir.relative_to(abs_root_path) / ".contextfiles"
              source_name = f"Local Rule ({str(contextfile_rel_path).replace(os.sep, '/')})"
-             match_in_this_dir = _find_match_in_ruleset(ruleset, source_name, pattern_to_match, context_dir=current_dir, explain_mode=explain_mode)
+             match_in_this_dir = _find_match_in_ruleset(
+                 ruleset, source_name,
+                 item_abs_path=abs_item_path, item_is_dir=is_dir, root_abs_path=abs_root_path,
+                 context_dir_abs_path=current_dir.resolve(), # Pass absolute path of context dir
+                 explain_mode=explain_mode
+             )
              if match_in_this_dir is not None:
                  local_match = match_in_this_dir # Store the match from the closest file
                  break # Stop walking up once the closest match is found
@@ -261,29 +304,41 @@ def check_item(
             break
         current_dir = current_dir.parent # Move up one directory
 
-    # 3. Check Global Rules
-    global_match = _find_match_in_ruleset(global_rules, "Global Rule", pattern_to_match, explain_mode=explain_mode)
+    # 3. Check Global Rules - Use root-relative matching
+    global_match = _find_match_in_ruleset(
+        global_rules, "Global Rule",
+        item_abs_path=abs_item_path, item_is_dir=is_dir, root_abs_path=abs_root_path,
+        context_dir_abs_path=None, explain_mode=explain_mode
+    )
 
-    # 4. Check Default Exclusions (Lowest Precedence)
-    default_match = _find_match_in_ruleset(DEFAULT_EXCLUDE_RULESET, "Default Rule", pattern_to_match, explain_mode=explain_mode)
+    # 4. Check Default Exclusions (Lowest Precedence) - Use root-relative matching
+    default_match = _find_match_in_ruleset(
+        DEFAULT_EXCLUDE_RULESET, "Default Rule",
+        item_abs_path=abs_item_path, item_is_dir=is_dir, root_abs_path=abs_root_path,
+        context_dir_abs_path=None, explain_mode=explain_mode
+    )
 
-    # 5. Determine final result based on precedence, prioritizing exclusions
+    # 5. Determine final result based on precedence (highest first)
+    final_decision: Optional[CheckResult] = None
     if inline_match is not None:
-        # Highest precedence, return its result directly
-        return inline_match
-    # Check exclusions next, in order of precedence
-    elif local_match is not None and not local_match[0]: # local_match is Exclude
-        return local_match
-    elif global_match is not None and not global_match[0]: # global_match is Exclude
-        return global_match
-    elif default_match is not None: # default_match is always Exclude if it exists
-        return default_match
-    # If no exclusions matched at higher levels, check inclusions
-    elif local_match is not None and local_match[0]: # local_match is Include
-        return local_match
-    elif global_match is not None and global_match[0]: # global_match is Include
-        return global_match
+        # Inline rules have the absolute highest precedence
+        final_decision = inline_match
+    elif local_match is not None:
+        # If a local rule (closest first) matched, its decision takes precedence
+        final_decision = local_match
+    elif global_match is not None:
+        # If a global rule matched, its decision takes precedence
+        final_decision = global_match
+    elif default_match is not None:
+        # If a default exclusion rule matched (and no higher rules did)
+        final_decision = default_match
     else:
         # If no rules matched at any level, include by default
-        return True, "Included by default (no matching rules)"
+        final_decision = (True, "Included by default (no matching rules)")
+
+    if explain_mode:
+        # Use relative_path_str calculated earlier for consistent logging path format
+        logger.debug(f"Final decision for '{relative_path_str}': {final_decision}")
+
+    return final_decision
 # --- End of check_item function ---
