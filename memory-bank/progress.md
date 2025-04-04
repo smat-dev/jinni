@@ -13,6 +13,7 @@ This file tracks the project's progress using a task list format.
 *   [2025-04-04 15:55:00] - Task 17: Default CLI Path Argument to Current Directory - Modified `jinni/cli.py` to make the `paths` argument optional (nargs='*', default=['.']). Updated `README.md`, `DESIGN.md`, and `decisionLog.md`.
 *   [2025-04-04 15:58:00] - Task 10: Implement Multi-Path CLI Input - Completed as part of Task 17 (changing `paths` nargs to `'*'`).
 *   [2025-04-04 22:35:54] - Task 18: Implement `jinni doc` / `jinni_doc` and Context Size Error Handling - Added `jinni doc` CLI command and `jinni_doc` MCP tool. Implemented `DetailedContextSizeError` in `core_logic.py` to report the 10 largest files when the size limit is exceeded. Updated CLI, server, and documentation (`README.md`, Memory Bank).
+*   [2025-04-05 12:55:00] - Task 19: Refactor `read_context` Arguments (Mandatory `project_root`, Optional `target`) - Changed `read_context` signature in `core_logic.py`, made `-r`/`--root` required in `cli.py`, updated MCP tool schema in `server.py`. Updated `README.md` and Memory Bank files.
 
 ## Current Major Task
 

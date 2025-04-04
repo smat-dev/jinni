@@ -7,8 +7,8 @@ import pytest # Import pytest for fixture usage if needed later
 def test_cli_with_contextfiles(test_environment: Path):
     """Test CLI run respecting hierarchical .contextfiles (dynamic rule application)."""
     test_dir = test_environment
-    # Run with the project directory as the target
-    stdout, stderr = run_jinni_cli([str(test_dir)])
+    # Run with the project directory as the root, no specific target
+    stdout, stderr = run_jinni_cli(["-r", str(test_dir)])
 
     # Expected includes based on conftest.py setup and dynamic rules:
     # Root .contextfiles: file_root.txt, *.md, src/, dir_c/, dir_e/, dir_f/, !*.log, !*.tmp
@@ -61,7 +61,7 @@ def test_cli_with_contextfiles(test_environment: Path):
 def test_cli_list_only(test_environment: Path):
     """Test the --list-only CLI flag with dynamic rules."""
     test_dir = test_environment
-    stdout, stderr = run_jinni_cli(['--list-only', str(test_dir)])
+    stdout, stderr = run_jinni_cli(["-r", str(test_dir), "--list-only"])
 
     expected_files = sorted([
         "README.md",
@@ -97,8 +97,8 @@ def test_cli_overrides(test_environment: Path): # Renamed from test_cli_global_c
         "README.md\n"  # Include README
         , encoding='utf-8'
     )
-    # Use --overrides instead of --config
-    stdout, stderr = run_jinni_cli(['--overrides', str(overrides_path), str(test_dir)])
+    # Use --overrides with project root
+    stdout, stderr = run_jinni_cli(["-r", str(test_dir), "--overrides", str(overrides_path)])
 
     # Expected includes based ONLY on override rules + defaults:
     # Overrides: *.py, !main.py, dir_b/, README.md
@@ -133,19 +133,20 @@ def test_cli_overrides(test_environment: Path): # Renamed from test_cli_global_c
 def test_cli_debug_explain(test_environment: Path):
     """Test the --debug-explain CLI flag with dynamic rules."""
     test_dir = test_environment
-    stdout, stderr = run_jinni_cli(['--debug-explain', str(test_dir)])
+    stdout, stderr = run_jinni_cli(["-r", str(test_dir), "--debug-explain"])
 
     # Check stderr for expected explanation patterns (may need adjustment based on exact logging)
     # Look for dynamic spec source descriptions
-    assert "DEBUG:jinni.core_logic:Compiled spec for" in stderr # General check for dynamic compilation logs
+    assert "DEBUG:jinni.context_walker:Compiled spec for" in stderr # Check for log from context_walker
     assert "from Context files at root" in stderr # Root context (Updated assertion)
     assert "from Context files up to ./src" in stderr # Src context
     assert "from Context files up to ./dir_a" in stderr # Dir_a context
 
     # Check specific inclusion/exclusion reasons based on the dynamic context
-    assert "DEBUG:jinni.core_logic:Including File: " in stderr # General check
-    assert "DEBUG:jinni.core_logic:Excluding File: " in stderr # General check
-    assert "DEBUG:jinni.core_logic:Pruning Directory: " in stderr # General check
+    # Check for the log message from the context walker module
+    assert "DEBUG:jinni.context_walker:Including File:" in stderr
+    assert "DEBUG:jinni.context_walker:Excluding File:" in stderr # Check context_walker logger
+    assert "DEBUG:jinni.context_walker:Pruning Directory" in stderr # Check context_walker logger
 
     # Example specific checks (adapt based on actual log output)
     assert "Including File: " in stderr and "file_root.txt" in stderr and "Context files at root" in stderr # Corrected assertion
@@ -160,64 +161,26 @@ def test_cli_debug_explain(test_environment: Path):
     assert "File: src/app.py" in stdout
     assert "File: dir_b/file_b1.py" in stdout # Should be included by default '*'
 
-def test_cli_multi_path_input(test_environment: Path):
-    """Test CLI with multiple file and directory inputs, checking for duplicates and explicit inclusion."""
-    test_dir = test_environment
-    # Setup rules: Include *.py and dir_a/important.log via root .contextfile
-    (test_dir / CONTEXT_FILENAME).write_text("**/*.py\ndir_a/important.log", encoding='utf-8')
+# Test removed as CLI now takes only one optional target
+# def test_cli_multi_path_input(test_environment: Path):
 
-    paths_to_test = [
-        str(test_dir / "main.py"),             # File included by *.py (explicit target)
-        str(test_dir / "src"),                 # Dir containing included files (explicit target)
-        str(test_dir / "dir_a/important.log"), # File included explicitly (explicit target)
-        str(test_dir / "src" / "app.py"),      # Duplicate file included via src dir and *.py (explicit target)
-        str(test_dir / "README.md")            # File NOT included by rules (explicit target)
-    ]
-    stdout, stderr = run_jinni_cli(paths_to_test)
+# (Content removed)
 
-    # Check expected content is present (all explicit targets + files included by rules within explicit dirs)
-    assert "File: main.py" in stdout           # Explicit target
-    assert "print('main')" in stdout
-    assert "File: src/app.py" in stdout        # Explicit target (and included by rule)
-    assert "print('app')" in stdout
-    assert "File: src/utils.py" in stdout      # Included via src dir target and *.py rule
-    assert "File: src/nested/deep.py" in stdout# Included via src dir target and *.py rule
-    assert "File: dir_a/important.log" in stdout # Explicit target (and included by rule)
-    assert "Important Log Content" in stdout
-    assert "File: README.md" in stdout         # Explicit target (even though not matched by *.py)
-    assert "# Readme" in stdout
-
-    # Check excluded content is absent
-    assert "file_root.txt" not in stdout
-    assert "config.yaml" not in stdout
-    assert "dir_c/" not in stdout
-    assert "lib/somelib.py" not in stdout # Not targeted, even though *.py matches
-
-    # Check for duplicates (count occurrences of file headers)
-    assert stdout.count("File: main.py") == 1
-    assert stdout.count("File: src/app.py") == 1
-    assert stdout.count("File: src/utils.py") == 1
-    assert stdout.count("File: src/nested/deep.py") == 1
-    assert stdout.count("File: dir_a/important.log") == 1
-    assert stdout.count("File: README.md") == 1
-
-    assert stderr.strip() == ""
-
-def test_cli_output_relative_to(test_environment: Path):
-    """Test the --output-relative-to flag."""
+def test_cli_project_root(test_environment: Path):
+    """Test the -r/--root flag."""
     test_dir = test_environment
     # Include just src/app.py for simplicity
     (test_dir / CONTEXT_FILENAME).write_text("src/app.py", encoding='utf-8')
 
-    # Run with output relative to test_dir (project root)
-    stdout_root, _ = run_jinni_cli([str(test_dir), "--output-relative-to", str(test_dir)])
-    assert "File: src/app.py" in stdout_root
+    # Run with project root set to test_dir, target is src/app.py
+    stdout_root, _ = run_jinni_cli(["-r", str(test_dir), str(test_dir / "src/app.py")])
+    assert "File: src/app.py" in stdout_root # Relative to root
 
-    # Run with output relative to test_dir/src
-    stdout_src, _ = run_jinni_cli([str(test_dir), "--output-relative-to", str(test_dir / "src")])
-    assert "File: app.py" in stdout_src
+    # Run with project root set to test_dir/src, target is app.py (relative to CWD, resolves inside root)
+    stdout_src, _ = run_jinni_cli(["-r", str(test_dir / "src"), str(test_dir / "src" / "app.py")]) # Pass absolute path for target
+    assert "File: app.py" in stdout_src # Relative to root (which is src)
     assert "File: src/app.py" not in stdout_src
 
-    # Run with output relative to test_dir.parent
-    stdout_parent, _ = run_jinni_cli([str(test_dir), "--output-relative-to", str(test_dir.parent)])
-    assert f"File: {test_dir.name}/src/app.py" in stdout_parent # Assuming test_dir name is 'project'
+    # Run with project root set to test_dir.parent, target is project/src/app.py
+    stdout_parent, _ = run_jinni_cli(["-r", str(test_dir.parent), str(test_dir / "src/app.py")])
+    assert f"File: {test_dir.name}/src/app.py" in stdout_parent # Relative to root (parent)

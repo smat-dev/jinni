@@ -24,7 +24,9 @@ This file records architectural and implementation decisions using a list format
  *   [2025-04-04 20:05:00] - Added CLI option `-S`/`--size` to display file sizes alongside paths when using `-l`/`--list-only`.
 *   [2025-04-04 22:36:08] - Added `jinni doc` CLI command and `jinni_doc` MCP tool to display README content.
 *   [2025-04-04 22:36:08] - Implemented enhanced context size error handling using `DetailedContextSizeError` to report the 10 largest files.
-
+*   [2025-04-05 12:54:00] - Refactored `read_context` arguments: `project_root` (string) is now mandatory, `target` (string) is optional (replaces previous `path`/`target_paths`).
+*   [2025-04-05 01:52:00] - Corrected MCP server `read_context` tool implementation to align with the refactored arguments (mandatory `project_root`, optional `target`). (Note: Core logic alignment pending further refactor).
+*   [2025-04-05 02:13:00] - Reversed decision on CLI structure. Kept existing CLI args (optional root, multiple paths) based on user feedback. Refactored `core_logic.py` into `utils.py`, `exceptions.py`, `file_processor.py`, `context_walker.py`, and a new `core_logic.py` orchestrator to handle both CLI and Server input styles.
 
 ## Rationale
 
@@ -42,6 +44,10 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-04 20:05:00] - User requested the ability to see file sizes in the list output, which is useful for quickly assessing the contribution of different files to the total context size without needing to run the full context dump.
 *   [2025-04-04 22:36:08] - `jinni doc`/`jinni_doc` provides convenient access to documentation (README) directly via CLI or MCP, useful for reference during usage or troubleshooting.
 *   [2025-04-04 22:36:08] - Simply aborting on context size limit wasn't user-friendly. Raising a specific error (`DetailedContextSizeError`) and including the list of largest files gives the user actionable information to configure exclusions effectively.
+*   [2025-04-05 12:54:00] - Clarifies the primary input as the project scope (`project_root`), making the specific file/directory (`target`) secondary. Aligns better with the concept of providing context for a whole project, optionally focusing on a part.
+*   [2025-04-05 01:52:00] - The previous refactoring (Task 19) was not fully applied to the MCP server implementation (`jinni/server.py`), leaving it with incorrect arguments (`path` mandatory, `project_root` optional). This correction ensures consistency between the server tool definition and the underlying core logic (at the time).
+*   [2025-04-05 02:13:00] - User preferred the existing flexible CLI argument structure. Refactoring `core_logic.py` allows supporting this while maintaining a stricter interface for the MCP server. This avoids breaking CLI user experience while enabling clearer programmatic use via MCP.
+
 
 
 ## Implementation Details
@@ -65,3 +71,6 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-04 20:05:00] - Added `-S`/`--size` argument (action='store_true') to `jinni/cli.py`. Added `include_size_in_list` boolean parameter to `jinni/core_logic.py::read_context`. Modified `read_context` to prepend `f"{file_stat_size}\t"` to the output line when both `list_only` and `include_size_in_list` are true. Passed `args.size` from `cli.py` to `read_context`.
 *   [2025-04-04 22:36:45] - Added `doc` subcommand to `jinni/cli.py`. Added `jinni_doc` tool handler to `jinni/server.py`. Both read and return `README.md`.
 *   [2025-04-04 22:36:45] - Defined `DetailedContextSizeError` in `jinni/core_logic.py`. Modified `read_context` to calculate total size, check against limit, find the 10 largest files if limit exceeded, and raise `DetailedContextSizeError` with the list. Updated error handling in `jinni/cli.py` and `jinni/server.py` to catch this specific error and display the file list.
+*   [2025-04-05 12:54:00] - (Partially Superseded) Attempted refactor of `core_logic.py` and CLI arguments. CLI changes reverted.
+*   [2025-04-05 01:52:00] - Corrected `jinni/server.py` MCP tool arguments (`project_root`, `target`).
+*   [2025-04-05 02:13:00] - Refactored original `jinni/core_logic.py` into `exceptions.py`, `utils.py`, `file_processor.py`, `context_walker.py`. Created new `jinni/core_logic.py` with `read_context(target_paths_str, project_root_str)` signature to handle CLI/Server differences and orchestrate calls to new modules. Updated imports in `cli.py`, `server.py`, `tests/test_utils.py`. Corrected `README.md` CLI documentation. Fixed CLI call to `read_context`. Updated Server call to adapt arguments.

@@ -51,12 +51,13 @@ This is customizable on a global and per-directory basis if desired.
 
 1.  **Setup:** Configure your MCP client (e.g., Claude Desktop's `claude_desktop_config.json`) to run the `jinni` server executable.
 2.  **Invocation:** When interacting with your LLM via the MCP client, the model can invoke the `read_context` tool.
-    *   **`path` (string, required):** The absolute path to the target file or directory to analyze.
+    *   **`project_root` (string, required):** The absolute path to the project root directory. Rule discovery and output paths are relative to this root.
+    *   **`target` (string, optional):** An absolute path or a path relative to the current working directory specifying the file/directory within `project_root` to process. If omitted, the entire `project_root` is processed. Must resolve to a path inside `project_root`.
     *   **`rules` (array of strings, optional):** A list of inline filtering rules (using `.gitignore`-style syntax, e.g., `["src/**/*.py", "!*.tmp"]`). If provided, these rules **override** and replace any `.contextfiles` logic.
     *   **`list_only` (boolean, optional):** If true, returns only the list of relative file paths instead of content.
     *   **`size_limit_mb` (integer, optional):** Override the context size limit in MB.
     *   **`debug_explain` (boolean, optional):** Enable debug logging on the server.
-    3.  **Output:** The tool returns a single string containing the concatenated content (with headers) or the file list. Paths in headers are relative to the common ancestor of the target(s) or the server's `--root` if set. In case of a context size error, it returns a `DetailedContextSizeError` with details about the largest files.
+    3.  **Output:** The tool returns a single string containing the concatenated content (with headers) or the file list. Paths in headers/lists are relative to the provided `project_root`. In case of a context size error, it returns a `DetailedContextSizeError` with details about the largest files.
 
 ### MCP Server (`jinni_doc` tool)
 
@@ -82,16 +83,17 @@ This is customizable on a global and per-directory basis if desired.
 ### Command-Line Utility (`jinni` CLI)
 
 ```bash
-jinni [OPTIONS] <PATH...>
+jinni [OPTIONS] [<PATH...>]
 ```
 
 *   **`<PATH...>` (optional):** One or more paths to the project directories or files to analyze. Defaults to the current directory (`.`) if none are provided.
+*   **`-r <DIR>` / `--root <DIR>` (optional):** Specify the project root directory. If provided, rule discovery starts here, and output paths are relative to this directory. If omitted, the root is inferred from the common ancestor of the `<PATH...>` arguments (or CWD if only '.' is processed).
 *   **`--output <FILE>` / `-o <FILE>` (optional):** Write the output to `<FILE>` instead of printing to standard output.
 *   **`--list-only` / `-l` (optional):** Only list the relative paths of files that would be included.
 *   **`--overrides <FILE>` (optional):** Use rules from `<FILE>` instead of discovering `.contextfiles`.
 *   **`--size-limit-mb <MB>` / `-s <MB>` (optional):** Override the maximum context size in MB.
 *   **`--debug-explain` (optional):** Print detailed inclusion/exclusion reasons to stderr and `jinni_debug.log`.
-*   **`--output-relative-to <DIR>` (optional):** Make output file paths relative to `<DIR>` instead of the default (common ancestor or CWD).
+*   **`--root <DIR>` / `-r <DIR>` (optional):** See above.
 *   **`--no-copy` (optional):** Prevent automatically copying the output content to the system clipboard when printing to standard output (the default is to copy).
 
 ### Command-Line Utility (`jinni doc`)
@@ -176,8 +178,8 @@ Jinni uses `.contextfiles` (or an override file) to determine which files and di
         *   Combines the rules from these files (parent rules first, child rules last) along with built-in default rules.
         *   Compiles these combined rules into a temporary specification (`PathSpec`).
         *   Matches the current file/directory path (relative to the common root) against this specification.
-    3.  **Matching:** The **last pattern** in the combined rule set that matches the item determines its fate. If the last matching pattern starts with `!`, the item is excluded. Otherwise, it's included. If no user-defined pattern in the combined rule set matches the item, it is included *unless* it matches one of the built-in default exclusion patterns (e.g., `.git/`, `node_modules/`, common binary extensions). If no pattern matches at all (neither user nor default), the item is included. Explicitly provided targets are always included regardless of rules.
-    4.  **Explicit Target Inclusion:** Any file or directory path explicitly provided as a command-line argument is *always* included or traversed, regardless of matching rules. Rules *are* still applied to *contents* of explicitly included directories.
+    3.  **Matching:** The **last pattern** in the combined rule set that matches the item determines its fate. If the last matching pattern starts with `!`, the item is excluded. Otherwise, it's included. If no user-defined pattern in the combined rule set matches the item, it is included *unless* it matches one of the built-in default exclusion patterns (e.g., `.git/`, `node_modules/`, common binary extensions). If no pattern matches at all (neither user nor default), the item is included.
+    4.  **Target Handling:** If a specific `target` is provided (CLI or MCP), it is validated to be within the `project_root`. If it's a file, only that file is processed (rule checks don't apply to the target file itself, but binary/size checks do). If it's a directory, the walk starts there, but rules are still applied relative to the `project_root`.
 
 ### Examples (`.contextfiles`)
 

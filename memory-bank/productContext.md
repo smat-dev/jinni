@@ -21,12 +21,14 @@ This file provides a high-level overview of the project and the expected product
 *   Includes file metadata (path, size, modification time) in output (unless `list_only`).
 *   Handles different text encodings.
 *   Provides a `jinni doc` CLI command and `jinni_doc` MCP tool to display the README content.
+*   Mandatory `project_root` argument (CLI: `-r`/`--root`, MCP: `project_root`) defines the scope for context processing and relative paths.
+*   Optional `target` argument (CLI: `<TARGET>`, MCP: `target`) specifies a file/directory within the `project_root` to focus on.
 
 ## Overall Architecture
 
 *   Python-based MCP server using the `mcp.server.fastmcp` library.
 *   Communicates via stdio transport.
-*   Core logic involves traversing directory trees (`os.walk`), dynamically determining the applicable rule set (`pathspec`) for each directory based on `.contextfiles` encountered from the root down (unless overrides are active), and applying these rules for filtering. Explicitly specified targets are always included. Uses `pathlib`.
+*   Core logic involves traversing directory trees (`os.walk`) starting from the `project_root` or the specified `target` within it. Dynamically determines the applicable rule set (`pathspec`) for each directory based on `.contextfiles` encountered from the `project_root` down (unless overrides are active), and applies these rules for filtering. Uses `pathlib`.
 *   Includes a separate CLI component (`jinni`) with override behavior (`--overrides` flag) that mirrors MCP server override behavior.
 
 ---
@@ -36,3 +38,4 @@ This file provides a high-level overview of the project and the expected product
 [2025-04-04 12:32:00] - Updated Overall Architecture to reflect the re-design of rule building (unified set per target) and unified override handling for CLI/MCP.
 [2025-04-04 13:04:00] - Further updated Overall Architecture to reflect dynamic rule compilation during traversal based on `.contextfiles` hierarchy, and the explicit inclusion of target paths.
 [2025-04-04 22:35:21] - Updated Key Features to include the `jinni_doc` command/tool and the enhanced context size error reporting (`DetailedContextSizeError` with largest files list).
+[2025-04-05 12:55:00] - Updated Key Features and Overall Architecture to reflect the change to a mandatory `project_root` and optional `target` argument structure.

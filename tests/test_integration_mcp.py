@@ -10,8 +10,8 @@ async def test_mcp_read_context_basic(test_environment: Path):
     """Test basic MCP read_context respecting .contextfiles (dynamic rules)."""
     test_dir = test_environment
     tool_name = "read_context"
-    # Remove 'root' argument
-    arguments = { "path": str(test_dir) } # Path must be string
+    # Use project_root, target is None
+    arguments = { "project_root": str(test_dir) }
     result = await run_mcp_tool_call(tool_name, arguments)
 
     assert isinstance(result, types.CallToolResult)
@@ -54,8 +54,8 @@ async def test_mcp_read_context_list_only(test_environment: Path):
     """Test MCP read_context with list_only=True."""
     test_dir = test_environment
     tool_name = "read_context"
-    # Remove 'root' argument
-    arguments = { "path": str(test_dir), "list_only": True }
+    # Use project_root, target is None
+    arguments = { "project_root": str(test_dir), "list_only": True }
     result = await run_mcp_tool_call(tool_name, arguments)
 
     assert isinstance(result, types.CallToolResult)
@@ -89,9 +89,9 @@ async def test_mcp_read_context_inline_rules(test_environment: Path):
     """Test MCP read_context with inline rules overriding file rules."""
     test_dir = test_environment
     tool_name = "read_context"
-    # Remove 'root' argument
+    # Use project_root, target is None
     arguments = {
-        "path": str(test_dir),
+        "project_root": str(test_dir),
         "rules": [ "*.py", "!src/app.py", "lib/**" ] # Inline: include py, exclude src/app.py, include lib/**
     }
     result = await run_mcp_tool_call(tool_name, arguments)
@@ -121,8 +121,8 @@ async def test_mcp_debug_explain(test_environment: Path):
     # Verifying server-side logging isn't feasible with stdio_client directly.
     test_dir = test_environment
     tool_name = "read_context"
-    # Remove 'root' argument
-    arguments = { "path": str(test_dir), "debug_explain": True }
+    # Use project_root, target is None
+    arguments = { "project_root": str(test_dir), "debug_explain": True }
     result = await run_mcp_tool_call(tool_name, arguments)
 
     # Check stdout content (same as basic MCP test)
@@ -141,8 +141,8 @@ async def test_mcp_read_context_target_file(test_environment: Path):
     test_dir = test_environment
     target_file = test_dir / "src" / "app.py"
     tool_name = "read_context"
-    # Target the specific file
-    arguments = { "path": str(target_file) }
+    # Target the specific file within the project root
+    arguments = { "project_root": str(test_dir), "target": str(target_file) }
     result = await run_mcp_tool_call(tool_name, arguments)
 
     assert isinstance(result, types.CallToolResult)
@@ -151,7 +151,7 @@ async def test_mcp_read_context_target_file(test_environment: Path):
     stdout_text = result.content[0].text
 
     # Should only contain the targeted file (as it's explicitly targeted)
-    assert "File: app.py" in stdout_text # Path relative to parent dir when targeting file
+    assert "File: src/app.py" in stdout_text # Path relative to project_root
     assert "print('app')" in stdout_text
     # Ensure no other files are present
     assert "File: main.py" not in stdout_text
