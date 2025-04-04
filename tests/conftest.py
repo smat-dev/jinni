@@ -147,6 +147,7 @@ def _create_test_structure(base_path: Path):
     # Lib directory (to be excluded)
     lib_dir = base_path / "lib"
     lib_dir.mkdir(exist_ok=True)
+    (lib_dir / "somelib.py").write_text("# Library code", encoding='utf-8') # Create the missing file
 
     # Docs directory
     docs_dir = base_path / "docs"

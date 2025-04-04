@@ -30,7 +30,7 @@ server = FastMCP("jinni")
 SERVER_ROOT_PATH: Optional[Path] = None
 
 # --- Tool Definition ---
-@server.tool()
+@server.tool(description="Read in context. Paths must be absolute.")
 async def read_context( # Renamed tool function to match core logic for clarity
     path: str,
     # Removed 'root' argument as it's handled by SERVER_ROOT_PATH validation now

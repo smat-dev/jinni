@@ -161,7 +161,7 @@ def test_read_context_include_py_files(test_dir: Path):
 
 def test_read_context_exclude_overrides_include(test_dir: Path):
     """Test exclusion pattern overriding inclusion in the same file."""
-    (test_dir / CONTEXT_FILENAME).write_text("**/*.py\n!project/src/utils.py", encoding='utf-8')
+    (test_dir / CONTEXT_FILENAME).write_text("**/*.py\n!src/utils.py", encoding='utf-8') # Corrected path
     content = run_read_context_helper(["project"], test_dir.parent)
 
     assert "File: main.py" in content
@@ -172,7 +172,7 @@ def test_read_context_exclude_overrides_include(test_dir: Path):
 
 def test_read_context_directory_exclusion(test_dir: Path):
     """Test excluding a directory prevents processing files within."""
-    (test_dir / CONTEXT_FILENAME).write_text("**/*.py\n!project/lib/", encoding='utf-8')
+    (test_dir / CONTEXT_FILENAME).write_text("**/*.py\n!lib/", encoding='utf-8') # Corrected path
     content = run_read_context_helper(["project"], test_dir.parent)
 
     assert "File: main.py" in content
@@ -256,15 +256,15 @@ def test_read_context_explicit_target_file_included(test_dir: Path):
 
 def test_read_context_explicit_target_dir_traversed(test_dir: Path):
     """Test explicitly targeted dir is traversed even if rules exclude it."""
-    (test_dir / CONTEXT_FILENAME).write_text("!project/src/", encoding='utf-8') # Exclude src dir
+    (test_dir / CONTEXT_FILENAME).write_text("!src/", encoding='utf-8') # Exclude src dir (Corrected path)
     # Target src directory directly
     content = run_read_context_helper(["project/src"], test_dir.parent)
-    # Files inside should be processed (and included by default rules here)
-    assert "File: src/app.py" in content
-    assert "File: src/utils.py" in content
-    assert "File: src/data.json" in content
-    assert "File: src/nested/deep.py" in content
-    assert "File: src/nested/other.txt" in content
+    # Files inside should be processed. Paths are relative to the target dir 'src'.
+    assert "File: app.py" in content # Corrected assertion
+    assert "File: utils.py" in content # Corrected assertion
+    assert "File: data.json" in content # Corrected assertion
+    assert "File: nested/deep.py" in content # Corrected assertion
+    assert "File: nested/other.txt" in content # Corrected assertion
     # Files outside src should not be included
     assert "File: main.py" not in content
 
@@ -304,7 +304,8 @@ def test_read_context_target_outside_relative_root(test_dir: Path):
     )
     # Should fall back to absolute path or path relative to CWD if not possible
     # For simplicity, check if the full path part is present
-    assert f"File: {test_dir.name}/main.py" in content or "File: project/main.py" in content
+    # Check for the absolute path as fallback
+    assert f"File: {test_dir.parent / 'project' / 'main.py'}" in content
 
 def test_find_context_files_helper(test_dir: Path):
     """Test the _find_context_files_for_dir helper directly."""

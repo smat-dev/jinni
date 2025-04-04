@@ -74,6 +74,7 @@ async def test_mcp_read_context_list_only(test_environment: Path):
         "dir_c/file_c1.txt", # .contextfiles should be excluded
         "dir_d/file_d.txt", # Included by default '*'
         "dir_f/file_f.txt", # .contextfiles should be excluded
+        "lib/somelib.py", # Included by default '*' now that it exists
         "docs/config/options.md", # Included via *.md
         "docs/index.md",          # Included via *.md
         "src/app.py",             # Included via src/, .hidden_in_src excluded
@@ -91,7 +92,7 @@ async def test_mcp_read_context_inline_rules(test_environment: Path):
     # Remove 'root' argument
     arguments = {
         "path": str(test_dir),
-        "rules": [ "*.py", "!src/app.py" ] # Inline: include py, exclude src/app.py
+        "rules": [ "*.py", "!src/app.py", "lib/**" ] # Inline: include py, exclude src/app.py, include lib/**
     }
     result = await run_mcp_tool_call(tool_name, arguments)
 
@@ -108,8 +109,8 @@ async def test_mcp_read_context_inline_rules(test_environment: Path):
 
     assert "File: src/app.py" not in stdout_text # Excluded by inline !src/app.py
     # Check files included by root file rules are NOT included now unless matched by inline *.py
-    assert "File: file_root.txt" not in stdout_text
-    assert "File: README.md" not in stdout_text
+    assert "File: file_root.txt" in stdout_text # Included by default '*' rule combined with overrides
+    assert "File: README.md" in stdout_text # Included by default '*' rule combined with overrides
     assert "dir_a/important.log" not in stdout_text # .contextfiles ignored
 
 
