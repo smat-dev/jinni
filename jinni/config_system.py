@@ -55,7 +55,7 @@ DEFAULT_RULES: List[str] = [
     "!*.swp",   # Swap files (e.g., Vim)
     "!*~",      # Backup files (e.g., Emacs)
     # Archive files
-    "!*.gz"
+    "!*.gz",
     "!*.zip",
     "!*.tar",
     "!*.bz2",

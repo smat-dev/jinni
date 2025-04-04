@@ -21,13 +21,35 @@ from mcp.server.fastmcp import FastMCP, Context
 
 # --- Core Logic Imports ---
 # Updated import to use the new core function and renamed to avoid collision
-from jinni.core_logic import read_context as core_read_context, ContextSizeExceededError, DEFAULT_SIZE_LIMIT_MB, ENV_VAR_SIZE_LIMIT
+from jinni.core_logic import (
+    read_context as core_read_context,
+    get_jinni_doc as core_get_jinni_doc, # Import new function
+    ContextSizeExceededError,
+    DetailedContextSizeError, # Import new exception
+    DEFAULT_SIZE_LIMIT_MB,
+    ENV_VAR_SIZE_LIMIT
+)
 
 # --- Server Definition ---
 server = FastMCP("jinni")
 
 # Global variable to store the server's root path if provided via CLI
 SERVER_ROOT_PATH: Optional[Path] = None
+
+
+# --- jinni_doc Tool ---
+@server.tool(description="Retrieves the content of the project's README.md file.")
+async def jinni_doc(ctx: Context = None) -> str:
+    """Returns documentation for advanced usage of Jinni"""
+    logger.info("--- jinni_doc tool invoked ---")
+    try:
+        readme_content = core_get_jinni_doc()
+        # Prepend the requested message
+        return f"Jinni Doc (accessed via MCP Client):\n\n{readme_content}"
+    except Exception as e:
+        logger.exception(f"Unexpected error in jinni_doc tool: {e}")
+        # Let FastMCP handle the exception formatting
+        raise e
 
 # --- Tool Definition ---
 @server.tool(description="Reads in context. To use read_context provide an absolute path to the project directory, or to a specific required component. Assume the user wants to read in context for the whole project unless otherwise specified - do not ask the user for clarification if just asked to use the tool / read in context. You can ignore the other arguments by default. If the user just says 'jinni', interpret that as read_context.")
@@ -83,8 +105,12 @@ async def read_context( # Renamed tool function to match core logic for clarity
              # This error means the path is not within the root
              raise ValueError(f"Tool path '{resolved_client_path}' is outside the allowed server root '{SERVER_ROOT_PATH}'")
 
-        # Use server root for relative path calculations in output
-        output_relative_to_path = SERVER_ROOT_PATH
+        # Validation passed. Now determine the base for relative paths based on the *client's* request.
+        if resolved_client_path.is_dir():
+            output_relative_to_path = resolved_client_path
+        else:
+            output_relative_to_path = resolved_client_path.parent
+        logger.debug(f"Server root validation passed. Using client path derived relative root: {output_relative_to_path}")
 
     else:
         # Server does NOT have a fixed root path - use client-provided path to determine relative root
@@ -117,7 +143,7 @@ async def read_context( # Renamed tool function to match core logic for clarity
         logger.debug(f"Finished processing target: {target_path_str}. Result length: {len(result_content)}")
         # Return the string result directly
         return result_content
-    except (FileNotFoundError, ContextSizeExceededError, ValueError) as e:
+    except (FileNotFoundError, ContextSizeExceededError, ValueError, DetailedContextSizeError) as e:
         # Let FastMCP handle converting these known errors
         logger.error(f"Error during read_context call for '{target_path_str}': {type(e).__name__} - {e}")
         raise e

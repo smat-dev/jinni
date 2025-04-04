@@ -11,84 +11,35 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import logging
 import logging.handlers
 # Updated import: core_logic now likely exposes a single main function
-from jinni.core_logic import read_context, ContextSizeExceededError, DEFAULT_SIZE_LIMIT_MB, ENV_VAR_SIZE_LIMIT
+from jinni.core_logic import (
+    read_context,
+    get_jinni_doc as core_get_jinni_doc, # Import doc function
+    ContextSizeExceededError, # Keep for now, though DetailedContextSizeError should be caught
+    DetailedContextSizeError, # Import new exception
+    DEFAULT_SIZE_LIMIT_MB,
+    ENV_VAR_SIZE_LIMIT
+)
 import pyperclip # Added for clipboard functionality
 
 # Setup logger for CLI - will be configured in main()
 logger = logging.getLogger("jinni.cli")
 DEBUG_LOG_FILENAME = "jinni_debug.log"
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Jinni: Concatenate relevant project files for LLM context.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  jinni ./my_project                  # Dump context of my_project to stdout
-  jinni ./src ../docs/README.md       # Dump context for multiple targets
-  jinni -l ./my_project               # List files that would be included
-  jinni -o context.txt ./my_project   # Write context to context.txt
-  jinni --overrides ../custom.rules . # Use override rules from ../custom.rules
-  jinni --debug-explain .             # Show reasons for inclusion/exclusion on stderr
-"""
-    )
-    parser.add_argument(
-        "paths",
-        nargs='*', # Changed from '+' to '*' to allow zero arguments
-        default=['.'], # Default to current directory if no paths are given
-        help="Paths to project directories or files to analyze (default: '.')."
-    )
-    parser.add_argument(
-        "--output",
-        "-o",
-        metavar="<file>",
-        help="Write output to a file instead of stdout."
-    )
-    parser.add_argument(
-        "-l",
-        "--list-only",
-        action="store_true",
-        help="Only list file paths found, do not include content."
-    )
-    parser.add_argument(
-        "-S",
-        "--size",
-        action="store_true",
-        help="Show file sizes when using --list-only."
-    )
-    # Removed --config argument
-    parser.add_argument(
-        "--overrides", # Added --overrides argument
-        metavar="<file>",
-        help="Specify an overrides file (using .contextfiles format). If provided, all .contextfiles are ignored."
-    )
-    parser.add_argument(
-        "-s",
-        "--size-limit-mb",
-        type=int,
-        default=None, # Will use ENV or default if not provided
-        help=f"Override the maximum total context size in MB (Default: ${ENV_VAR_SIZE_LIMIT} or {DEFAULT_SIZE_LIMIT_MB}MB)."
-    )
-    parser.add_argument(
-        "--debug-explain",
-        action="store_true",
-        help="Print detailed explanation for file/directory inclusion/exclusion to stderr."
-    )
-    # Add argument to specify the root for relative path calculation in output
-    parser.add_argument(
-        "--output-relative-to",
-        metavar="<dir>",
-        default=None,
-        help="Specify a directory path to make output file paths relative to (Default: common ancestor or CWD)."
-    )
-    parser.add_argument(
-        "--no-copy",
-        action="store_true",
-        help="Do not automatically copy the output content to the clipboard when printing to stdout."
-    )
+# --- Command Handlers ---
 
-    args = parser.parse_args()
+def handle_doc_command(args):
+    """Handles the 'doc' command."""
+    logger.debug("Executing 'doc' command.")
+    try:
+        doc_content = core_get_jinni_doc()
+        print(doc_content)
+    except Exception as e:
+        print(f"Error retrieving documentation: {e}", file=sys.stderr)
+        sys.exit(1)
 
+def handle_read_command(args):
+    """Handles the 'read' command (or default behavior)."""
+    logger.debug("Executing 'read' command.")
     # --- Input Validation ---
     input_paths = args.paths
     output_file = args.output
@@ -187,9 +138,15 @@ Examples:
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
-    except ContextSizeExceededError as e:
-        print(f"\nError: {e}", file=sys.stderr)
+    # --- Updated Error Handling ---
+    except DetailedContextSizeError as e:
+        # Print the detailed message from the exception
+        print(f"\n{e.detailed_message}", file=sys.stderr)
         sys.exit(1)
+    except ContextSizeExceededError as e: # Keep this as a fallback? core_logic should raise Detailed now.
+        print(f"\nError: {e}", file=sys.stderr) # Generic message if Detailed isn't caught somehow
+        sys.exit(1)
+    # --- End Updated Error Handling ---
     except ValueError as e: # Catch potential errors from core_logic path handling
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -200,6 +157,117 @@ Examples:
             import traceback
             logger.error("Traceback:", exc_info=True) # Log full traceback to debug file
         sys.exit(1)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Jinni: Process project files for LLM context or view documentation.",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    # Make subparser required if possible (Python 3.7+)
+    try:
+        subparsers.required = True
+    except AttributeError:
+        pass # required=True not available on older Python versions
+
+    # --- Read Command Parser ---
+    read_parser = subparsers.add_parser(
+        'read',
+        help='Read and process project context (default if no command specified).',
+        description="Reads context from specified paths, applying filtering rules.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+         epilog="""
+Examples:
+  jinni read ./my_project                  # Dump context of my_project to stdout
+  jinni read ./src ../docs/README.md       # Dump context for multiple targets
+  jinni read -l ./my_project               # List files that would be included
+  jinni read -o context.txt ./my_project   # Write context to context.txt
+  jinni read --overrides ../custom.rules . # Use override rules from ../custom.rules
+  jinni read --debug-explain .             # Show reasons for inclusion/exclusion on stderr
+"""
+    )
+    read_parser.add_argument(
+        "paths",
+        nargs='*',
+        default=['.'],
+        help="Paths to project directories or files to analyze (default: '.')."
+    )
+    read_parser.add_argument(
+        "--output",
+        "-o",
+        metavar="<file>",
+        help="Write output to a file instead of stdout."
+    )
+    read_parser.add_argument(
+        "-l",
+        "--list-only",
+        action="store_true",
+        help="Only list file paths found, do not include content."
+    )
+    read_parser.add_argument(
+        "-S",
+        "--size",
+        action="store_true",
+        help="Show file sizes when using --list-only."
+    )
+    read_parser.add_argument(
+        "--overrides",
+        metavar="<file>",
+        help="Specify an overrides file (using .contextfiles format). If provided, all .contextfiles are ignored."
+    )
+    read_parser.add_argument(
+        "-s",
+        "--size-limit-mb",
+        type=int,
+        default=None,
+        help=f"Override the maximum total context size in MB (Default: ${ENV_VAR_SIZE_LIMIT} or {DEFAULT_SIZE_LIMIT_MB}MB)."
+    )
+    read_parser.add_argument(
+        "--debug-explain",
+        action="store_true",
+        help="Print detailed explanation for file/directory inclusion/exclusion to stderr."
+    )
+    read_parser.add_argument(
+        "--output-relative-to",
+        metavar="<dir>",
+        default=None,
+        help="Specify a directory path to make output file paths relative to (Default: common ancestor or CWD)."
+    )
+    read_parser.add_argument(
+        "--no-copy",
+        action="store_true",
+        help="Do not automatically copy the output content to the clipboard when printing to stdout."
+    )
+    read_parser.set_defaults(func=handle_read_command)
+
+    # --- Doc Command Parser ---
+    doc_parser = subparsers.add_parser(
+        'doc',
+        help='Display the Jinni README.md documentation.'
+    )
+    doc_parser.set_defaults(func=handle_doc_command)
+
+    # --- Parse Arguments ---
+    # Handle case where no command is given (treat as 'read .')
+    args_list = sys.argv[1:]
+    if not args_list or args_list[0] not in ['read', 'doc', '-h', '--help']:
+         # If first arg isn't a known command or help, insert 'read'
+         args_list.insert(0, 'read')
+
+    args = parser.parse_args(args_list)
+
+    # --- Execute Command ---
+    args.func(args) # Call the appropriate handler function
+
+    # --- Logic moved to handle_read_command ---
+
+    # --- Call Core Logic ---
+    # --- Logic moved to handle_read_command ---
+
+
+    # --- Logic moved to handle_read_command ---
 
 if __name__ == "__main__":
     main()

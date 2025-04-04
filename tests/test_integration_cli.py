@@ -123,7 +123,12 @@ def test_cli_overrides(test_environment: Path): # Renamed from test_cli_global_c
     assert ".env" not in stdout # Excluded by default
     assert "build/" not in stdout # Excluded by default
 
-    assert stderr.strip() == ""
+    # Check stderr doesn't contain critical errors (lines starting with ERROR: or containing Traceback),
+    # allowing for warnings/debug from binary detection.
+    for line in stderr.splitlines():
+        line_lower = line.lower()
+        assert not line_lower.startswith("error:"), f"stderr contained line starting with 'error:': {line}"
+        assert "traceback" not in line_lower, f"stderr contained 'traceback': {line}"
 
 def test_cli_debug_explain(test_environment: Path):
     """Test the --debug-explain CLI flag with dynamic rules."""

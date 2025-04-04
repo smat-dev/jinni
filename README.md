@@ -26,6 +26,9 @@ This is customizable on a global and per-directory basis if desired.
     *   A command-line tool for manually generating the project context dump.
     *   Useful feeding context to LLMs via copy-paste or file input. Or pipe the output wherever you need it.
 
+3.  **`jinni doc` / `jinni_doc` Tool:**
+    *   A simple command (`jinni doc` via CLI) or MCP tool (`jinni_doc`) that displays the content of this README file. Useful for quick reference within the terminal or via an MCP client.
+
 ## Features
 
 *   **Efficient Context Gathering:** Reads and concatenates relevant project files in one operation.
@@ -37,7 +40,7 @@ This is customizable on a global and per-directory basis if desired.
    *   **Customizable Configuration (`.contextfiles` / Overrides):**
        *   Define precisely which files/directories to include or exclude using `.gitignore`-style patterns.
        *   Patterns starting with `!` negate the match (an exclusion pattern). (See Configuration section below).
-*   **Large Context Handling:** Aborts with an error if the total size of included files exceeds a configurable limit (default: 100MB) to prevent excessive output.
+*   **Large Context Handling:** Aborts with a `DetailedContextSizeError` if the total size of included files exceeds a configurable limit (default: 100MB). The error message includes a list of the 10 largest files contributing to the size, helping you identify candidates for exclusion. See the Troubleshooting section for guidance on managing context size.
 *   **Metadata Headers:** Output includes file path, size, and modification time for each included file (can be disabled with `list_only`).
 *   **Encoding Handling:** Attempts multiple common text encodings (UTF-8, Latin-1, etc.).
 *   **List Only Mode:** Option to only list the relative paths of files that would be included, without their content.
@@ -53,7 +56,12 @@ This is customizable on a global and per-directory basis if desired.
     *   **`list_only` (boolean, optional):** If true, returns only the list of relative file paths instead of content.
     *   **`size_limit_mb` (integer, optional):** Override the context size limit in MB.
     *   **`debug_explain` (boolean, optional):** Enable debug logging on the server.
-    3.  **Output:** The tool returns a single string containing the concatenated content (with headers) or the file list. Paths in headers are relative to the common ancestor of the target(s) or the server's `--root` if set.
+    3.  **Output:** The tool returns a single string containing the concatenated content (with headers) or the file list. Paths in headers are relative to the common ancestor of the target(s) or the server's `--root` if set. In case of a context size error, it returns a `DetailedContextSizeError` with details about the largest files.
+
+### MCP Server (`jinni_doc` tool)
+
+*   **Invocation:** The model can invoke the `jinni_doc` tool (no arguments needed).
+*   **Output:** Returns the content of the `README.md` file as a string.
 
 *(Detailed server setup instructions will vary depending on your MCP client. Generally, you need to configure the client to execute the `jinni-server` command. For example, in Claude Desktop's `claude_desktop_config.json`):*
 
@@ -86,6 +94,14 @@ jinni [OPTIONS] <PATH...>
 *   **`--output-relative-to <DIR>` (optional):** Make output file paths relative to `<DIR>` instead of the default (common ancestor or CWD).
 *   **`--no-copy` (optional):** Prevent automatically copying the output content to the system clipboard when printing to standard output (the default is to copy).
 
+### Command-Line Utility (`jinni doc`)
+
+```bash
+jinni doc
+```
+
+*   Displays the content of this README file to standard output.
+
 ### Installation
 
 You can install Jinni globally using npm:
@@ -94,7 +110,7 @@ You can install Jinni globally using npm:
 npm install -g jinni
 ```
 
-This will make the `jinni` CLI and `jinni-server` MCP server command available in your system PATH.
+This will make the `jinni` CLI (including `jinni doc`) and `jinni-server` MCP server command available in your system PATH.
 
 Alternatively, you can run the CLI directly without global installation using `npx`:
 
@@ -200,3 +216,25 @@ utils/*.sh
 ## Development
 
 *   **Design Details:** [DESIGN.md](DESIGN.md)
+
+## Troubleshooting
+
+### Context Size Errors (`DetailedContextSizeError`)
+
+If you encounter an error indicating the context size limit was exceeded, Jinni will provide a list of the 10 largest files it attempted to include. This helps you identify potential candidates for exclusion.
+
+**To resolve this:**
+
+1.  **Review the Largest Files:** Check the list provided in the error message. Are there large files (e.g., data files, logs, build artifacts, media) that shouldn't be part of the LLM's context?
+2.  **Configure Exclusions:** Use `.contextfiles` or the `--overrides` / `rules` options to exclude unnecessary files or directories.
+    *   **Example (`.contextfiles`):** To exclude all `.log` files and a specific large data directory:
+        ```
+        # Exclude all log files
+        !*.log
+
+        # Exclude a large data directory
+        !large_data_files/
+        ```
+    *   Refer to the **Configuration** section above for detailed syntax and usage.
+3.  **Increase the Limit (Use with Caution):** If all included files are genuinely necessary, you can increase the size limit using `--size-limit-mb` (CLI) or `size_limit_mb` (MCP). Be mindful of LLM context window limits and processing costs.
+4.  **Use `jinni doc` / `jinni_doc`:** If you need to refer back to these instructions or the configuration details while troubleshooting, use the `jinni doc` command or the `jinni_doc` MCP tool.

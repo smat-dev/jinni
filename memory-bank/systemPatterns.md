@@ -8,7 +8,7 @@ It is optional, but recommended to be updated as the project evolves.
 
 ## Coding Patterns
 
-*   
+*   [2025-04-04 22:35:39] - **Detailed Error Reporting via Custom Exception:** For specific, actionable errors like exceeding the context size limit, a custom exception class (`DetailedContextSizeError`) is used. This exception carries additional diagnostic information (e.g., a list of the largest files) directly, allowing the caller (CLI or MCP server) to present more helpful error messages to the user without needing complex logic outside the core function.
 
 ## Architectural Patterns
 

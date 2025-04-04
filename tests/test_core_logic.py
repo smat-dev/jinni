@@ -6,7 +6,7 @@ from typing import Set, List, Optional, Tuple
 
 import pathspec # Direct import, assume it's installed
 # Import the refactored function and exception
-from jinni.core_logic import read_context, ContextSizeExceededError, SEPARATOR, _find_context_files_for_dir # Import helper for specific tests if needed
+from jinni.core_logic import read_context, ContextSizeExceededError, DetailedContextSizeError, SEPARATOR, _find_context_files_for_dir # Import helper for specific tests if needed
 from jinni.config_system import CONTEXT_FILENAME, DEFAULT_RULES # Import constants
 
 # --- Test Fixture ---
@@ -243,7 +243,7 @@ def test_read_context_size_limit_exceeded(test_dir: Path):
     """Test exceeding size limit raises error."""
     (test_dir / CONTEXT_FILENAME).write_text("**/*.py", encoding='utf-8')
     limit_mb = 0.0001 # ~100 bytes
-    with pytest.raises(ContextSizeExceededError):
+    with pytest.raises(DetailedContextSizeError):
         run_read_context_helper(["project"], test_dir.parent, size_limit_mb=limit_mb)
 
 def test_read_context_explicit_target_file_included(test_dir: Path):
