@@ -27,24 +27,35 @@ DEFAULT_RULES: List[str] = [
     "*",
     # Dotfiles / Dirs at any level
     "!.*",
-    "!*/.*", # Exclude dotfiles/dirs within subdirectories
-    # Hidden directories (less common pattern, but keep for now)
-    # "!.*/", # Covered by !*/.* now? Let's keep it commented for safety.
-    f"!{CONTEXT_FILENAME}", # Explicitly exclude context files
-    # Version Control
-    # Node
+    f"!{CONTEXT_FILENAME}", # Explicitly exclude jinni context files
     "!node_modules/",
     # Python Exclusions
     "!__pycache__/",
     "!*.pyc",
     "!*.pyo",
-    "!venv/",
-    "!env/",
-    # Build artifacts / Logs / OS files Exclusions
+    "!venv/", # Standard virtualenv
+    "!env/",  # Standard virtualenv
+    "!.venv/", # Common virtualenv
+    "!.env/",  # Common environment files dir/prefix
+    "!*.egg-info/", # Python packaging metadata
+    # Build artifacts / Logs / Output / Temp Exclusions
     "!build/",
     "!dist/",
-    "!*.log",
-    "!Thumbs.db",
+    "!target/", # Common Java/Rust build output
+    "!out/",    # Common build output
+    "!bin/",    # Compiled binaries
+    "!obj/",    # Compiled object files
+    "!output/", # General output directory
+    "!logs/",   # Log directory
+    "!*.log",   # Log files
+    "!log.*",   # Files starting with log.
+    "!*.bak",   # Backup files
+    "!*.tmp",   # Temporary files
+    "!*.temp",  # Temporary files
+    "!*.swp",   # Swap files (e.g., Vim)
+    "!*~",      # Backup files (e.g., Emacs)
+    # OS-specific
+    "!Thumbs.db", # Windows thumbnail cache
 ]
 
 def load_rules_from_file(file_path: Path) -> List[str]:

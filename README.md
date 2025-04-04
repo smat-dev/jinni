@@ -2,9 +2,9 @@
 
 # Jinni: Bring Your Project Into LLM Context
 
-Jinni is a tool designed to help Large Language Models (LLMs) efficiently understand the context of your software projects. It provides a consolidated view of relevant project files, overcoming the limitations and inefficiencies of reading files one by one.
+Jinni is a tool designed to help Large Language Models efficiently understand the context of your projects. It provides a consolidated view of relevant project files, overcoming the limitations and inefficiencies of reading files one by one.
 
-Jinni achieves this through two main components: an MCP (Model Context Protocol) server for integration with AI tools and a command-line utility (CLI) for manual use.
+Jinni achieves this through two main components: an MCP (Model Context Protocol) server for integration with AI tools and a command-line utility (CLI) for manual use that copies project context to the clipboard ready to paste wherever you need it.
 
 ## Components
 
@@ -16,7 +16,7 @@ Jinni achieves this through two main components: an MCP (Model Context Protocol)
 
 2.  **`jinni` CLI:**
     *   A command-line tool for manually generating the project context dump.
-    *   Useful for scripting, local analysis, or feeding context to LLMs via copy-paste or file input.
+    *   Useful feeding context to LLMs via copy-paste or file input. Or pipe the output wherever you need it.
     *   Provides similar filtering and output capabilities as the MCP server.
 
 ## Features
@@ -192,7 +192,4 @@ utils/*.sh
 
 ## Development
 
-*   **Project Plan:** [PLAN.md](PLAN.md)
 *   **Design Details:** [DESIGN.md](DESIGN.md)
-
-*(Contribution guidelines can be added here if needed)*

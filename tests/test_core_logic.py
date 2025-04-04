@@ -114,7 +114,7 @@ def test_read_context_no_rules_defaults(test_dir: Path):
     assert "File: src/nested/other.txt" in content
     assert "File: docs/index.md" in content
     assert "File: docs/config/options.md" in content
-    assert "File: temp.tmp" in content # Included by '*' default, not excluded by others
+    assert "File: temp.tmp" not in content # Now excluded by default !*.tmp rule
 
     # Check for files/dirs expected to be excluded by defaults or type
     assert "File: .env" not in content # Excluded by !.*
@@ -132,7 +132,7 @@ def test_read_context_list_only_defaults(test_dir: Path):
         "README.md",
         "main.py",
         "config.yaml",
-        "temp.tmp", # Included by '*' default
+        # "temp.tmp", # Now excluded by default !*.tmp rule
         "src/app.py",
         "src/utils.py",
         "src/data.json",

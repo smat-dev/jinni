@@ -30,6 +30,7 @@
 *   [2025-04-04 01:24:12] - Changed rule precedence logic based on user feedback: Inline rules now completely override local `.contextfiles`. Updated `config_system.py`, `DESIGN.md`, `README.md`, `decisionLog.md`.
 *   [2025-04-04 12:33:00] - Approved major re-architecture of config system and core logic (see `decisionLog.md`). This involves factoring out rule building, using `pathlib`, unifying CLI/MCP override behavior, and updating related components (CLI, docs, tests).
 *   [2025-04-04 13:04:30] - Finalized the re-architecture plan (see `decisionLog.md`) to use dynamic `PathSpec` compilation during traversal, incorporating feedback on `.contextfile` handling and explicit target inclusion.
+*   [2025-04-04 17:49:34] - Updated `DEFAULT_RULES` in `config_system.py` to include more common exclusion patterns for directories (target, out, bin, obj, output, logs, .svn, .hg, .idea, .vscode, *.egg-info) and files (log.*, *.bak, *.tmp, *.temp, *.swp, *~).
 ## Open Questions/Issues
 *   [2025-04-02 19:16:35] - Feature Request: Allow CLI to accept multiple directory/file paths as positional arguments, avoiding duplicate output.
 *   [2025-04-02 19:16:35] - Feature Request: Add new MCP tool `read_context_list` to handle multiple paths and avoid duplicates, similar to the CLI request.
