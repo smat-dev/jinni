@@ -3,6 +3,7 @@ import sys
 import os
 import json # Keep for potential future use
 import logging
+import io # Add io for StringIO
 import argparse
 from pathlib import Path
 from typing import List, Optional, Any, Union, Set # Added Set
@@ -127,7 +128,36 @@ async def read_context(
     if resolved_target_path_str:
         logger.info(f"Focusing on target: {resolved_target_path_str}")
     # --- Call Core Logic ---
+    log_capture_buffer = None
+    temp_handler = None
+    loggers_to_capture = []
+    debug_output = ""
+
     try:
+        if debug_explain:
+            # Setup temporary handler to capture debug logs
+            log_capture_buffer = io.StringIO()
+            temp_handler = logging.StreamHandler(log_capture_buffer)
+            temp_handler.setLevel(logging.DEBUG)
+            # Simple formatter for captured logs
+            formatter = logging.Formatter('%(name)s:%(levelname)s: %(message)s')
+            temp_handler.setFormatter(formatter)
+
+            # Add handler to relevant core logic loggers
+            loggers_to_capture = [
+                logging.getLogger(name) for name in
+                ["jinni.core_logic", "jinni.context_walker", "jinni.file_processor", "jinni.config_system", "jinni.utils"]
+            ]
+            for core_logger in loggers_to_capture:
+                # Explicitly set level to DEBUG *before* adding handler
+                # This ensures messages are generated for the handler to capture
+                original_level = core_logger.level
+                core_logger.setLevel(logging.DEBUG)
+                core_logger.addHandler(temp_handler)
+                # Store original level? Not strictly necessary for this hack,
+                # as we remove the handler later, but good practice if we were restoring level.
+
+
         # Adapt server args (mandatory project_root, optional target)
         # to core_logic args (list of targets, optional project_root for relativity)
         effective_target_paths_str: List[str]
@@ -138,18 +168,27 @@ async def read_context(
             # If no target is given, process the project root itself
             effective_target_paths_str = [resolved_project_root_path_str]
 
-        result_content = core_read_context( # Use the directly imported function name
+        # Call the core logic function
+        result_content = core_read_context(
             target_paths_str=effective_target_paths_str,
             project_root_str=resolved_project_root_path_str, # Pass the server's mandatory root
             override_rules=rules,
             list_only=list_only,
             size_limit_mb=size_limit_mb,
-            debug_explain=debug_explain
+            debug_explain=debug_explain # Pass flag down
             # include_size_in_list is False by default in core_logic if not passed
         )
         logger.debug(f"Finished processing project_root: {resolved_project_root_path_str}, target: {resolved_target_path_str}. Result length: {len(result_content)}")
-        # Return the string result directly
-        return result_content
+
+        if debug_explain and log_capture_buffer:
+            debug_output = log_capture_buffer.getvalue()
+
+        # Combine result and debug output if necessary
+        if debug_output:
+            return f"{result_content}\n\n--- DEBUG LOG ---\n{debug_output}"
+        else:
+            return result_content
+
     except (FileNotFoundError, ContextSizeExceededError, ValueError, DetailedContextSizeError) as e:
         # Let FastMCP handle converting these known errors
         logger.error(f"Error during read_context call for project_root='{resolved_project_root_path_str}', target='{resolved_target_path_str}': {type(e).__name__} - {e}")
@@ -158,6 +197,13 @@ async def read_context(
         # Log unexpected errors before FastMCP potentially converts to a generic 500
         logger.exception(f"Unexpected error processing project_root='{resolved_project_root_path_str}', target='{resolved_target_path_str}': {type(e).__name__} - {e}")
         raise e
+    finally:
+        # --- Cleanup: Remove temporary handler ---
+        if temp_handler and loggers_to_capture:
+            logger.debug("Removing temporary debug log handler.")
+            for core_logger in loggers_to_capture:
+                core_logger.removeHandler(temp_handler)
+            temp_handler.close()
 
 
 # --- Main Execution Block ---
