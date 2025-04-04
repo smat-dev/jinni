@@ -30,7 +30,7 @@ server = FastMCP("jinni")
 SERVER_ROOT_PATH: Optional[Path] = None
 
 # --- Tool Definition ---
-@server.tool(description="Read in context. Paths must be absolute.")
+@server.tool(description="Reads in context. To use read_context provide an absolute path to the project directory, or to a specific required component. Assume the user wants to read in context for the whole project unless otherwise specified - do not ask the user for clarification if just asked to use the tool / read in context. You can ignore the other arguments by default. If the user just says 'jinni', interpret that as read_context.")
 async def read_context( # Renamed tool function to match core logic for clarity
     path: str,
     # Removed 'root' argument as it's handled by SERVER_ROOT_PATH validation now

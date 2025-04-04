@@ -50,6 +50,12 @@ Examples:
         action="store_true",
         help="Only list file paths found, do not include content."
     )
+    parser.add_argument(
+        "-S",
+        "--size",
+        action="store_true",
+        help="Show file sizes when using --list-only."
+    )
     # Removed --config argument
     parser.add_argument(
         "--overrides", # Added --overrides argument
@@ -146,7 +152,8 @@ Examples:
             override_rules=override_rules_list, # Pass loaded override rules
             list_only=list_only,
             size_limit_mb=size_limit_mb,
-            debug_explain=debug_explain
+            debug_explain=debug_explain,
+            include_size_in_list=args.size # Pass the new CLI arg value
         )
 
         # --- Output ---

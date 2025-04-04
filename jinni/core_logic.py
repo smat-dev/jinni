@@ -3,6 +3,7 @@ import os
 import datetime
 import logging
 import mimetypes # Added for better binary detection
+import puremagic # Added for pure-python binary detection
 from pathlib import Path
 from typing import List, Tuple, Dict, Optional, Any, Set, Iterable
 import fnmatch # For simple default matching if needed, though pathspec is preferred
@@ -55,47 +56,66 @@ def get_file_info(file_path: Path) -> Dict[str, Any]:
         logger.warning(f"Could not get stats for {file_path}: {e}")
         return {'size': 0, 'last_modified': 'N/A'}
 
+# Corrected _is_binary function starts here
 def _is_binary(file_path: Path) -> bool:
     """
     Check if a file appears to be binary.
-
-    First, attempts to guess the MIME type. If it's clearly text, returns False.
-    Otherwise, falls back to checking for null bytes in the initial chunk.
+    Uses puremagic first. If inconclusive, falls back to null-byte check.
+    Requires the 'puremagic' library to be installed.
     """
-    # Guess MIME type based on extension
-    mime_type, encoding = mimetypes.guess_type(file_path)
-    logger.debug(f"Guessed MIME type for {file_path}: {mime_type}")
+    filepath_str = str(file_path)
+    mime_type = None
+    puremagic_failed = False
 
-    if mime_type:
-        # If the MIME type is explicitly text, treat as not binary
-        if mime_type.startswith('text/'):
-            logger.debug(f"File {file_path} identified as text by MIME type.")
-            return False
-        # If the MIME type is a known non-text type, treat as binary
-        # Add more specific application types if needed (e.g., application/pdf)
-        known_text_app_types = {'application/json', 'application/xml', 'application/javascript', 'application/xhtml+xml', 'application/rss+xml', 'application/atom+xml'}
-        if mime_type.startswith(('image/', 'audio/', 'video/')) or \
-           (mime_type.startswith('application/') and mime_type not in known_text_app_types and 'text' not in mime_type and 'script' not in mime_type):
-             logger.debug(f"File {file_path} identified as binary by MIME type: {mime_type}")
-             return True
-
-    # If MIME type is inconclusive or not definitively binary/text, fall back to null byte check
-    logger.debug(f"MIME type for {file_path} is inconclusive ({mime_type}). Falling back to null byte check.")
+    # 1. Try puremagic detection
     try:
-        with open(file_path, 'rb') as f:
-            chunk = f.read(BINARY_CHECK_CHUNK_SIZE)
-            has_null_byte = b'\x00' in chunk
-            if has_null_byte:
-                logger.debug(f"File {file_path} detected as binary due to null byte.")
+        mime_type = puremagic.from_file(filepath_str, mime=True)
+        logger.debug(f"Detected MIME type for {file_path} via puremagic: {mime_type}")
+
+        if mime_type and isinstance(mime_type, str):
+            if mime_type.startswith('text/'):
+                logger.debug(f"File {file_path} identified as text by MIME type.")
+                return False  # Definitely text
             else:
-                logger.debug(f"File {file_path} not detected as binary by null byte check.")
-            return has_null_byte
-    except OSError as e:
-        logger.warning(f"Could not perform binary check (read) on {file_path}: {e}. Assuming not binary.")
-        return False
-    except Exception as e:
-        logger.warning(f"Unexpected error during binary check (read) for {file_path}: {e}. Assuming not binary.")
-        return False
+                # If puremagic gives a non-text MIME type, treat as binary
+                logger.debug(f"File {file_path} identified as binary by MIME type: {mime_type}")
+                return True  # Definitely binary (based on puremagic)
+        # If mime_type is None here, puremagic was inconclusive, proceed to fallback
+
+    except puremagic.main.PureError as e:
+        logger.debug(f"puremagic detection failed for {file_path}: {e}. Falling back to null byte check.")
+        puremagic_failed = True
+    except OSError as e:  # File access error during puremagic
+        logger.warning(f"Could not perform puremagic check (read error) on {file_path}: {e}. Assuming binary as safe fallback.")
+        return True # Assume binary if we can't even read it for puremagic
+    except Exception as e:  # Other errors during puremagic
+        logger.warning(f"Unexpected error during puremagic check for {file_path}: {e}. Falling back to null byte check.")
+        puremagic_failed = True
+
+    # 2. Fallback to Null Byte Check if puremagic was inconclusive (returned None) or failed
+    if mime_type is None or puremagic_failed:
+        logger.debug(f"puremagic inconclusive/failed for {file_path}. Falling back to null byte check.")
+        try:
+            with open(file_path, 'rb') as f:
+                # Assuming BINARY_CHECK_CHUNK_SIZE is defined globally (e.g., 1024)
+                chunk = f.read(BINARY_CHECK_CHUNK_SIZE)
+                has_null_byte = b'\x00' in chunk
+                if has_null_byte:
+                    logger.debug(f"File {file_path} detected as binary by null byte check.")
+                else:
+                    logger.debug(f"File {file_path} not detected as binary by null byte check.")
+                return has_null_byte  # True if null byte found (binary), False otherwise (likely text)
+        except OSError as e:  # File access error during null byte check
+            logger.warning(f"Could not perform null byte check (read error) on {file_path}: {e}. Assuming binary as safe fallback.")
+            return True # Assume binary if we can't read it for null byte check
+        except Exception as e:  # Other errors during null byte check
+            logger.warning(f"Unexpected error during null byte check for {file_path}: {e}. Assuming binary as safe fallback.")
+            return True # Assume binary on unexpected error
+
+    # Should not be reached if logic is correct, but as a final safety net
+    logger.warning(f"Reached unexpected end of _is_binary logic for {file_path}. Assuming binary.")
+    return True
+# Corrected _is_binary function ends here
 
 def _find_context_files_for_dir(dir_path: Path, root_path: Path) -> List[Path]:
     """Finds all .contextfiles from root_path down to dir_path."""
@@ -134,7 +154,8 @@ def read_context(
     override_rules: Optional[List[str]] = None,
     list_only: bool = False,
     size_limit_mb: Optional[int] = None,
-    debug_explain: bool = False
+    debug_explain: bool = False,
+    include_size_in_list: bool = False # Added for CLI --size option
 ) -> str:
     """
     Processes target files/directories, applying context rules dynamically.
@@ -272,9 +293,10 @@ def read_context(
                 relative_path_str = str(target_path) # Fallback
 
             if list_only:
-                output_parts.append(relative_path_str)
+                output_line = f"{file_stat_size}\t{relative_path_str}" if include_size_in_list else relative_path_str
+                output_parts.append(output_line)
                 processed_files_set.add(target_path)
-                # Size doesn't increase in list_only mode after initial check
+                # Size doesn't increase in list_only mode after initial check (size already checked)
             else:
                 # Read content
                 try:
@@ -429,21 +451,24 @@ def read_context(
                         continue
 
                     # --- Passed Rule Check (or explicit target) ---
-                    # Get file info, check size, check binary
+                    # Perform binary check first
+                    if _is_binary(file_path):
+                         if debug_explain: logger.debug(f"Skipping File: {file_path} -> Detected as binary (check applied for list_only={list_only})")
+                         continue
+
+                    # Binary check passed, now get info and check size
                     file_info = get_file_info(file_path)
                     file_stat_size = file_info['size']
 
                     if total_size_bytes + file_stat_size > size_limit_bytes:
                          if file_stat_size > size_limit_bytes and total_size_bytes == 0:
+                             # Log warning only if size check fails *after* passing binary check
                              logger.warning(f"File {file_path} ({file_stat_size} bytes) exceeds size limit of {effective_limit_mb}MB. Skipping.")
                              continue
                          else:
                              raise ContextSizeExceededError(effective_limit_mb, total_size_bytes + file_stat_size)
 
-                    # Binary check (now runs even if list_only is True)
-                    if _is_binary(file_path):
-                         if debug_explain: logger.debug(f"Skipping File: {file_path} -> Detected as binary (check applied for list_only={list_only})")
-                         continue
+                    # --- Both binary and size checks passed ---
 
                     # Get relative path for output
                     try:
@@ -453,7 +478,8 @@ def read_context(
 
                     # Add to output
                     if list_only:
-                        output_parts.append(relative_path_str)
+                        output_line = f"{file_stat_size}\t{relative_path_str}" if include_size_in_list else relative_path_str
+                        output_parts.append(output_line)
                         processed_files_set.add(file_path)
                     else:
                         try:

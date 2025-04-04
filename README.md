@@ -1,23 +1,30 @@
 <img src="assets/jinni_banner_1280x640.png" alt="Jinni Banner" width="400"/>
 
-# Jinni: Bring Your Project Into LLM Context
+# Jinni: Bring Your Project Into Context
 
-Jinni is a tool designed to help Large Language Models efficiently understand the context of your projects. It provides a consolidated view of relevant project files, overcoming the limitations and inefficiencies of reading files one by one.
+Jinni is a tool to efficiently provide Large Language Models the context of your projects. It gives a consolidated view of relevant project files complete with metadata, overcoming the limitations and inefficiencies of reading files one by one.
+
+The philosophy behind this tool is that LLM context windows are large, models are smart, and directly seeing your project best equips the model to help with anything you throw at it.
 
 Jinni achieves this through two main components: an MCP (Model Context Protocol) server for integration with AI tools and a command-line utility (CLI) for manual use that copies project context to the clipboard ready to paste wherever you need it.
+
+The tools are opinionated about what counts as relevant project context to best work out of the box in most use cases, automatically excluding:
+    * Binary files
+    * Dotfiles and hideen directories
+    * Common naming conventions for logs, build directories, tempfiles, etc
+
+This is customizable on a global and per-directory basis if desired.
+
 
 ## Components
 
 1.  **`jinni` MCP Server:**
-    *   Integrates with MCP-compatible clients (like Claude Desktop, Continue.dev, etc.).
+    *   Integrates with MCP clients like Cursor, Cline, Roo, Claude Desktop, etc.
     *   Exposes a `read_context` tool that returns a concatenated string of relevant file contents from a specified project directory.
-    *   Uses intelligent filtering based on default rules and custom `.contextfiles`.
-    *   Communicates via stdio.
 
 2.  **`jinni` CLI:**
     *   A command-line tool for manually generating the project context dump.
     *   Useful feeding context to LLMs via copy-paste or file input. Or pipe the output wherever you need it.
-    *   Provides similar filtering and output capabilities as the MCP server.
 
 ## Features
 

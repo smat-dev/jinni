@@ -20,6 +20,9 @@ This file records architectural and implementation decisions using a list format
  *   [2025-04-04 15:46:00] - Changed behavior of `-l`/`--list-only` flag to apply binary check.
  *   [2025-04-04 15:50:00] - Added CLI feature to copy output to clipboard. [2025-04-04 15:51:00] - Changed to default behavior with `--no-copy` opt-out.
  *   [2025-04-04 15:55:00] - Made CLI `paths` argument optional, defaulting to `.` (current directory).
+ *   [2025-04-04 19:48:00] - Replaced heuristic binary file detection (`mimetypes` + null-byte check) with `puremagic` library (pure Python) for improved accuracy and cross-platform compatibility.
+ *   [2025-04-04 20:05:00] - Added CLI option `-S`/`--size` to display file sizes alongside paths when using `-l`/`--list-only`.
+ *   [2025-04-04 20:20:00] - Refined `_is_binary` fallback logic: If `puremagic` fails or returns an inconclusive result (e.g., `None`), fall back to checking for null bytes in the first chunk (`BINARY_CHECK_CHUNK_SIZE`) instead of immediately assuming binary.
 
 
 ## Rationale
@@ -34,6 +37,9 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-04 15:46:00] - User requested that the `-l` output exactly match the files whose content would be included in a normal run. Previously, `-l` skipped the binary check.
 *   [2025-04-04 15:50:00] - User requested a convenient way to get CLI output into the clipboard. Added dependency `pyperclip`. [2025-04-04 15:51:00] - User preferred copy-by-default for stdout.
 *   [2025-04-04 15:55:00] - User requested simpler invocation for the common case of processing the current directory.
+*   [2025-04-04 19:48:00] - The previous heuristic binary detection (`mimetypes` + null-byte check) was unreliable for some file types (e.g., Zip archives like `.pt` files). `puremagic` uses its own database of magic numbers in pure Python, providing accurate content-based file type identification without external dependencies like `libmagic`. This ensures reliable exclusion of binary files and simplifies installation.
+*   [2025-04-04 20:05:00] - User requested the ability to see file sizes in the list output, which is useful for quickly assessing the contribution of different files to the total context size without needing to run the full context dump.
+*   [2025-04-04 20:20:00] - The previous fallback (assuming binary if `puremagic` failed) was too aggressive, incorrectly excluding files like Julia source (`.jl`) that `puremagic` couldn't identify. Using the null-byte check as a secondary heuristic provides a better balance, correctly identifying common text files even if `puremagic` fails, while still catching many binary types.
 
 
 ## Implementation Details
@@ -53,3 +59,6 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-04 15:46:00] - Modified `jinni/core_logic.py::read_context`: Removed `not list_only and` from the conditions checking the result of `_is_binary` (lines ~255 and ~434 in the previous version) so the check runs unconditionally.
 *   [2025-04-04 15:50:00] - Added `pyperclip` to `requirements.txt`. Modified `jinni/cli.py`: added `-c`/`--copy` argument, imported `pyperclip`, added logic to call `pyperclip.copy(result_content)` if the flag is set and output is going to stdout. Updated `README.md` and `DESIGN.md`. [2025-04-04 15:51:00] - Changed CLI argument to `--no-copy` (action='store_true') and updated clipboard logic to copy unless `--no-copy` is present and output is stdout. Updated docs again.
 *   [2025-04-04 15:55:00] - Modified `jinni/cli.py`: Changed `paths` argument `nargs` from `'+'` to `'*'` and added `default=['.']`. Updated `README.md` and `DESIGN.md`. (Note: Changing `nargs` to `'*'` also implicitly implemented Task 10: Multi-Path CLI Input).
+*   [2025-04-04 19:48:00] - Added `puremagic` to `requirements.txt`. Replaced the `_is_binary` function in `jinni/core_logic.py` with a new implementation using `puremagic.from_file(filepath, mime=True)` to check if the MIME type starts with `text/`. Added error handling for `ImportError` and `puremagic.main.PureError`, defaulting to assuming binary as a safe fallback.
+*   [2025-04-04 20:05:00] - Added `-S`/`--size` argument (action='store_true') to `jinni/cli.py`. Added `include_size_in_list` boolean parameter to `jinni/core_logic.py::read_context`. Modified `read_context` to prepend `f"{file_stat_size}\t"` to the output line when both `list_only` and `include_size_in_list` are true. Passed `args.size` from `cli.py` to `read_context`.
+*   [2025-04-04 20:20:00] - Rewrote the `_is_binary` function in `jinni/core_logic.py`. It now first attempts detection with `puremagic.from_file(mime=True)`. If the result starts with `text/`, it returns `False`. If it's any other string, it returns `True`. If `puremagic` returns `None` or raises `PureError` or `Exception`, it proceeds to read the first `BINARY_CHECK_CHUNK_SIZE` bytes and checks for `b'\x00'`. It returns `True` if a null byte is found, `False` otherwise. `OSError` during either check defaults to returning `True`.

@@ -54,6 +54,15 @@ DEFAULT_RULES: List[str] = [
     "!*.temp",  # Temporary files
     "!*.swp",   # Swap files (e.g., Vim)
     "!*~",      # Backup files (e.g., Emacs)
+    # Archive files
+    "!*.gz"
+    "!*.zip",
+    "!*.tar",
+    "!*.bz2",
+    "!*.xz",
+    "!*.7z",
+    "!*.rar",
+    "!*.zipx",
     # OS-specific
     "!Thumbs.db", # Windows thumbnail cache
 ]
