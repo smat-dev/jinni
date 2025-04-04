@@ -114,11 +114,11 @@ def test_cli_overrides(test_environment: Path): # Renamed from test_cli_global_c
 
     # Check excluded
     assert "File: main.py" not in stdout # Excluded by override !main.py
-    assert "File: file_root.txt" in stdout # Included by default '*' rule combined with overrides
-    assert "File: dir_a/file_a1.txt" in stdout # Included by default '*' rule combined with overrides
-    assert "File: dir_c/file_c1.txt" in stdout # Included by default '*' rule combined with overrides
-    assert "File: dir_f/file_f.txt" in stdout # Included by default '*' rule combined with overrides
-    assert "File: docs/index.md" in stdout # Included by default '*' rule combined with overrides
+    assert "File: file_root.txt" not in stdout # Excluded because .contextfiles are ignored by overrides
+    assert "File: dir_a/important.log" not in stdout # Excluded because .contextfiles are ignored by overrides
+    assert "File: dir_c/file_c1.txt" not in stdout # Excluded because .contextfiles are ignored by overrides
+    assert "File: dir_f/file_f.txt" not in stdout # Excluded because .contextfiles are ignored by overrides
+    assert "File: docs/index.md" not in stdout # Excluded because .contextfiles are ignored by overrides
     assert "config.yaml" not in stdout # Not included by override rules
     assert ".env" not in stdout # Excluded by default
     assert "build/" not in stdout # Excluded by default

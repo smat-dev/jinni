@@ -35,6 +35,7 @@
 *   [2025-04-05 12:55:00] - Refactored `read_context` arguments: `project_root` is now mandatory (CLI: `-r`/`--root`, MCP: `project_root`), and an optional `target` argument specifies the item within the root. Updated `core_logic.py`, `cli.py`, `server.py`, `README.md`, and Memory Bank files (`decisionLog.md`, `productContext.md`).
 *   [2025-04-05 01:53:00] - Corrected MCP server (`jinni/server.py`) implementation and integration tests (`tests/test_integration_mcp.py`) to properly use the mandatory `project_root` and optional `target` arguments.
 *   [2025-04-05 02:13:00] - Refactored `core_logic.py` into smaller modules (`utils`, `exceptions`, `file_processor`, `context_walker`, new `core_logic`). Updated core `read_context` signature to handle both CLI (optional root, multiple paths) and Server (mandatory root, optional target) inputs. Fixed calls in CLI and Server handlers. Updated `README.md` and `decisionLog.md`.
+*   [2025-04-05 12:20:00] - Changed override rule behavior in `core_logic.py` to replace default rules entirely, ensuring standard `.gitignore` precedence. Updated `README.md`, `DESIGN.md`, and `decisionLog.md`.
 ## Open Questions/Issues
 *   [2025-04-02 19:16:35] - Feature Request: Allow CLI to accept multiple directory/file paths as positional arguments, avoiding duplicate output.
 *   [2025-04-02 19:16:35] - Feature Request: Add new MCP tool `read_context_list` to handle multiple paths and avoid duplicates, similar to the CLI request.

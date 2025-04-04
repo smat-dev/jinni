@@ -27,6 +27,9 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-05 12:54:00] - Refactored `read_context` arguments: `project_root` (string) is now mandatory, `target` (string) is optional (replaces previous `path`/`target_paths`).
 *   [2025-04-05 01:52:00] - Corrected MCP server `read_context` tool implementation to align with the refactored arguments (mandatory `project_root`, optional `target`). (Note: Core logic alignment pending further refactor).
 *   [2025-04-05 02:13:00] - Reversed decision on CLI structure. Kept existing CLI args (optional root, multiple paths) based on user feedback. Refactored `core_logic.py` into `utils.py`, `exceptions.py`, `file_processor.py`, `context_walker.py`, and a new `core_logic.py` orchestrator to handle both CLI and Server input styles.
+*   [2025-04-05 12:20:00] - Changed override rule behavior: Override rules (CLI `--overrides` or MCP `rules`) now completely replace built-in default rules, instead of being combined with them.
+*   [2025-04-05 12:42:00] - Confirmed rule override behavior: CLI `--overrides` or MCP `rules` cause these rules (combined with built-in defaults) to be used exclusively, ignoring any rules defined in `.contextfiles`.
+*   [2025-04-05 12:42:00] - Enhanced `read_context` MCP tool: The `target` parameter now accepts either a single string path or a JSON array of string paths (e.g., `["path/to/file1", "path/to/dir2"]`).
 
 ## Rationale
 
@@ -47,6 +50,9 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-05 12:54:00] - Clarifies the primary input as the project scope (`project_root`), making the specific file/directory (`target`) secondary. Aligns better with the concept of providing context for a whole project, optionally focusing on a part.
 *   [2025-04-05 01:52:00] - The previous refactoring (Task 19) was not fully applied to the MCP server implementation (`jinni/server.py`), leaving it with incorrect arguments (`path` mandatory, `project_root` optional). This correction ensures consistency between the server tool definition and the underlying core logic (at the time).
 *   [2025-04-05 02:13:00] - User preferred the existing flexible CLI argument structure. Refactoring `core_logic.py` allows supporting this while maintaining a stricter interface for the MCP server. This avoids breaking CLI user experience while enabling clearer programmatic use via MCP.
+*   [2025-04-05 12:20:00] - Combining default rules with overrides led to unexpected precedence behavior (e.g., `!*` not overriding the initial default `*`). Making overrides replace defaults entirely aligns with standard `.gitignore` behavior and user expectations for overrides.
+*   [2025-04-05 12:42:00] - The previous override behavior (combining overrides with defaults) led to unexpected precedence issues. Making overrides exclusive (replacing defaults and ignoring `.contextfiles`) aligns with standard `.gitignore` behavior and user expectations for explicit overrides.
+*   [2025-04-05 12:42:00] - Allowing the MCP `target` parameter to accept an array of paths provides greater flexibility for programmatically targeting multiple specific files or directories within a project root, mirroring a capability already present in the CLI.
 
 
 
@@ -74,3 +80,6 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-05 12:54:00] - (Partially Superseded) Attempted refactor of `core_logic.py` and CLI arguments. CLI changes reverted.
 *   [2025-04-05 01:52:00] - Corrected `jinni/server.py` MCP tool arguments (`project_root`, `target`).
 *   [2025-04-05 02:13:00] - Refactored original `jinni/core_logic.py` into `exceptions.py`, `utils.py`, `file_processor.py`, `context_walker.py`. Created new `jinni/core_logic.py` with `read_context(target_paths_str, project_root_str)` signature to handle CLI/Server differences and orchestrate calls to new modules. Updated imports in `cli.py`, `server.py`, `tests/test_utils.py`. Corrected `README.md` CLI documentation. Fixed CLI call to `read_context`. Updated Server call to adapt arguments.
+*   [2025-04-05 12:20:00] - Modified `jinni/core_logic.py`: Changed line `all_override_rules = DEFAULT_RULES + override_rules` to `override_spec = compile_spec_from_rules(override_rules, "Overrides")` within the `if use_overrides:` block. Updated `README.md` and `DESIGN.md`.
+*   [2025-04-05 12:42:00] - Updated documentation (`README.md`, `DESIGN.md`, `memory-bank/productContext.md`) to reflect the exclusive nature of override rules. Core logic change was previously implemented in `jinni/context_walker.py`.
+*   [2025-04-05 12:42:00] - Updated `jinni/server.py` tool schema and description for the `read_context` tool's `target` parameter. Updated documentation (`README.md`, `DESIGN.md`, `memory-bank/productContext.md`) to reflect this change.

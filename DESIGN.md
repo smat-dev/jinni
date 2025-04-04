@@ -16,7 +16,7 @@ This document details the internal design of the `jinni` MCP Server, `jinni` CLI
    *   **Filtering (Dynamic Rule Application):**
        *   Determines a `rule_discovery_root` (common ancestor of targets or CWD).
        *   For each directory visited during `os.walk`:
-           *   If overrides are active (CLI `--overrides` or MCP `rules`): Uses a pre-compiled `PathSpec` (Defaults + Overrides).
+           *   If overrides are active (CLI `--overrides` or MCP `rules`): Uses a pre-compiled `PathSpec` based exclusively on the provided override rules (built-in defaults and `.contextfiles` are ignored).
            *   If no overrides: Finds relevant `.contextfiles` from `rule_discovery_root` down to the current directory, loads rules, combines with defaults, and compiles a `PathSpec` specific to that directory's context.
        *   Applies the active `PathSpec` to filter files and prune subdirectories.
        *   **Explicit Target Inclusion:** Any file or directory path explicitly provided as a target in the initial list is *always* included/traversed, regardless of matching rules.
@@ -74,7 +74,7 @@ This document details the internal design of the `jinni` MCP Server, `jinni` CLI
 *   **Rule Application Logic (`core_logic.py`):**
     1.  **Override Check:** Determines if override rules are provided (CLI `--overrides <file>` or MCP `rules` argument).
     2.  **Dynamic Spec Generation (During `os.walk`):**
-        *   **If Overrides Active:** Uses a single `PathSpec` compiled from `DEFAULT_RULES + override_rules` for the entire traversal. All `.contextfiles` are ignored.
+        *   **If Overrides Active:** Uses a single `PathSpec` compiled exclusively from the provided `override_rules` for the entire traversal. All `.contextfiles` and built-in default rules are ignored.
         *   **If No Overrides:** For each directory visited:
             *   Finds all `.contextfiles` from the `rule_discovery_root` down to the current directory.
             *   Loads rules from these files.
@@ -94,8 +94,9 @@ This document details the internal design of the `jinni` MCP Server, `jinni` CLI
 *   **Tool: `read_context`**
     *   **Description:** Generates a concatenated view of relevant code files from a specified directory, applying filtering rules from defaults, `.contextfiles`, and optional inline rules.
     *   **Input Schema:**
-        *   `path` (string, required): Absolute path to the target file or directory to process.
-        *   `rules` (array of strings, optional): List of inline filtering rules (using `.contextfiles` syntax, e.g., `["!*.log", "src/"]`). If provided, these act as override rules, ignoring all `.contextfiles`.
+        *   `project_root` (string, required): The absolute path to the project root directory. Rule discovery and output paths are relative to this root.
+        *   `target` (string or JSON array of strings, optional): Specifies the file(s)/director(y/ies) within `project_root` to process. Can be a single string path (absolute or relative to CWD) or a JSON array of string paths (e.g., `["path/to/file1", "path/to/dir2"]`). If omitted, the entire `project_root` is processed. All target paths must resolve to locations inside `project_root`.
+        *   `rules` (JSON array of strings, optional): A list of inline filtering rules (using `.gitignore`-style syntax, e.g., `["src/**/*.py", "!*.tmp"]`). If provided, these rules are used exclusively, ignoring built-in defaults and `.contextfiles`.
         *   `list_only` (boolean, optional, default: false): Only list file paths.
         *   `size_limit_mb` (integer, optional): Override context size limit.
         *   `debug_explain` (boolean, optional, default: false): Enable debug logging on server stderr.
@@ -110,7 +111,7 @@ This document details the internal design of the `jinni` MCP Server, `jinni` CLI
     *   `paths` (optional, positional, zero or more): Target directory or file paths to process. Defaults to `['.']` if none provided.
     *   `--output <file>` / `-o <file>` (optional): Write output to a file instead of stdout.
     *   `--list-only` / `-l` (optional): Only list file paths found.
-    *   `--overrides <file>` (optional): Specify an overrides file. If provided, ignores all `.contextfiles`.
+    *   `--overrides <file>` (optional): Specify an overrides file. If provided, rules from this file are used exclusively, ignoring built-in defaults and all `.contextfiles`.
     *   `--size-limit-mb <int>` / `-s <int>` (optional): Override context size limit.
     *   `--debug-explain` (optional): Enable detailed debug logging to stderr and `jinni_debug.log`.
     *   `--output-relative-to <dir>` (optional): Make output file paths relative to this directory.

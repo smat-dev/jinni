@@ -174,6 +174,8 @@ def run_jinni_cli(args: List[str]):
     try:
         # Run in the project root so imports work
         result = subprocess.run(command, capture_output=True, text=True, check=True, cwd=str(PROJECT_ROOT), timeout=10) # Increased timeout slightly
+        # Print stderr for debugging purposes, especially when tests fail on stdout checks
+        print(f"--- Captured Stderr ---\n{result.stderr}\n--- End Captured Stderr ---", file=sys.stderr)
         # Normalize stderr newlines for comparison
         stderr_normalized = "\n".join(result.stderr.splitlines())
         return result.stdout, stderr_normalized

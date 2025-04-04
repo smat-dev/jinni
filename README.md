@@ -35,7 +35,7 @@ This is customizable on a global and per-directory basis if desired.
 *   **Intelligent Filtering (Gitignore-Style Inclusion):**
     *   Uses a system based on `.gitignore` syntax (`pathspec` library's `gitwildmatch`).
     *   Supports hierarchical configuration using `.contextfiles` placed within your project directories. Rules are applied dynamically based on the file/directory being processed.
-    *   **Overrides:** Supports `--overrides` (CLI) or `rules` (MCP) to completely replace `.contextfiles` logic for specific runs.
+    *   **Overrides:** Supports `--overrides` (CLI) or `rules` (MCP) to use a specific set of rules exclusively. When overrides are active, both built-in default rules and any `.contextfiles` are ignored.
     *   **Explicit Target Inclusion:** Files/directories explicitly provided as input paths are *always* included/traversed.
    *   **Customizable Configuration (`.contextfiles` / Overrides):**
        *   Define precisely which files/directories to include or exclude using `.gitignore`-style patterns.
@@ -52,8 +52,8 @@ This is customizable on a global and per-directory basis if desired.
 1.  **Setup:** Configure your MCP client (e.g., Claude Desktop's `claude_desktop_config.json`) to run the `jinni` server executable.
 2.  **Invocation:** When interacting with your LLM via the MCP client, the model can invoke the `read_context` tool.
     *   **`project_root` (string, required):** The absolute path to the project root directory. Rule discovery and output paths are relative to this root.
-    *   **`target` (string, optional):** An absolute path or a path relative to the current working directory specifying the file/directory within `project_root` to process. If omitted, the entire `project_root` is processed. Must resolve to a path inside `project_root`.
-    *   **`rules` (array of strings, optional):** A list of inline filtering rules (using `.gitignore`-style syntax, e.g., `["src/**/*.py", "!*.tmp"]`). If provided, these rules **override** and replace any `.contextfiles` logic.
+    *   **`target` (string or JSON array of strings, optional):** Specifies the file(s)/director(y/ies) within `project_root` to process. Can be a single string path (absolute or relative to CWD) or a JSON array of string paths (e.g., `["path/to/file1", "path/to/dir2"]`). If omitted, the entire `project_root` is processed. All target paths must resolve to locations inside `project_root`.
+    *   **`rules` (JSON array of strings, optional):** A list of inline filtering rules (using `.gitignore`-style syntax, e.g., `["src/**/*.py", "!*.tmp"]`). If provided, these rules are used exclusively, ignoring built-in defaults and `.contextfiles`.
     *   **`list_only` (boolean, optional):** If true, returns only the list of relative file paths instead of content.
     *   **`size_limit_mb` (integer, optional):** Override the context size limit in MB.
     *   **`debug_explain` (boolean, optional):** Enable debug logging on the server.
@@ -172,7 +172,7 @@ Jinni uses `.contextfiles` (or an override file) to determine which files and di
     *   **Directory Matching:** A trailing `/` matches directories only.
     *   **Wildcards:** `*`, `**`, `?` work as in `.gitignore`.
 *   **Rule Application Logic:**
-    1.  **Override Check:** If `--overrides` (CLI) or `rules` (MCP) are provided, these rules (combined with built-in defaults) are used exclusively. All `.contextfiles` are ignored.
+    1.  **Override Check:** If `--overrides` (CLI) or `rules` (MCP) are provided, these rules are used exclusively. All `.contextfiles` and built-in defaults are ignored.
     2.  **Dynamic Context Rules (No Overrides):** When processing a file or directory, Jinni:
         *   Finds all `.contextfiles` starting from a common root directory down to the current item's directory.
         *   Combines the rules from these files (parent rules first, child rules last) along with built-in default rules.

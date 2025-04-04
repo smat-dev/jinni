@@ -51,16 +51,17 @@ async def jinni_doc() -> str:
 # --- Tool Definition (Corrected) ---
 @server.tool(description=(
     "Reads context from a specified project root directory (absolute path). "
-    "Optionally focuses on a specific target file/directory within that root. "
+    "Optionally focuses on specific target files/directories within that root. "
     "Returns a concatenated string of files with metadata including paths relative to the project root. "
     "Assume the user wants to read in context for the whole project unless otherwise specified - "
     "do not ask the user for clarification if just asked to use the tool / read in context. "
     "You can ignore the other arguments by default. "
-    "If the user just says 'jinni', interpret that as read_context."
+    "If the user just says 'jinni', interpret that as read_context. "
+    "Both `target` and `rules` accept a JSON array of strings."
 ))
 async def read_context(
     project_root: str, # Mandatory project root path
-    target: Optional[str] = None, # Optional target path within project_root
+    target: Optional[Union[str, List[str]]] = None, # Optional target path(s) within project_root
     rules: Optional[List[str]] = None,
     list_only: bool = False,
     size_limit_mb: Optional[int] = None,
@@ -72,15 +73,15 @@ async def read_context(
     Generates a concatenated view of relevant code files for a given target path.
 
     The 'project_root' argument must always be an absolute path.
-    The optional 'target' argument, if provided, must be an absolute path or a path
-    relative to the current working directory, and it must resolve to a location
+    The optional 'target' argument, if provided, can be a single path (string) or a list of paths (JSON array of strings).
+    Each path must be absolute or relative to the current working directory, and must resolve to a location
     *inside* the 'project_root'.
 
     If the server was started with a --root argument, the provided 'project_root' must be
     within that server root directory.
     Args:
         project_root: **MUST BE ABSOLUTE PATH**. The absolute path to the project root directory.
-        target: Optional path (absolute or relative to CWD) to a specific file or directory
+        target: Optional path or list of paths (absolute or relative to CWD) to specific files or directories
                 within the project root to process. If omitted, the entire project root is processed.
         rules: Optional list of inline filtering rules (using .contextfiles syntax). Defaults to None.
         list_only: Only list file paths found. Defaults to False.
@@ -97,23 +98,32 @@ async def read_context(
     resolved_project_root_path_str = str(resolved_project_root_path) # Store as string for core_logic
     logger.debug(f"Using project_root: {resolved_project_root_path_str}")
 
-    # Validate target if provided
-    resolved_target_path_str: Optional[str] = None
+    # Validate target(s) if provided
+    resolved_target_paths_str: List[str] = [] # Use a list to hold resolved paths
     if target:
-        # Resolve target relative to CWD (Path default) before checking if it's inside project_root
-        resolved_target_path = Path(target).resolve()
-        if not resolved_target_path.exists():
-             raise FileNotFoundError(f"Tool 'target' path does not exist: {resolved_target_path}")
-        # Check if target is within project_root AFTER resolving
-        try:
-            resolved_target_path.relative_to(resolved_project_root_path)
-        except ValueError:
-             raise ValueError(f"Tool 'target' path '{resolved_target_path}' is outside the specified project root '{resolved_project_root_path}'")
-        resolved_target_path_str = str(resolved_target_path)
-        logger.debug(f"Using target path: {resolved_target_path_str}")
+        target_list = [target] if isinstance(target, str) else target
+        logger.debug(f"Processing target list: {target_list}")
+        for idx, single_target in enumerate(target_list):
+            if not isinstance(single_target, str):
+                 raise TypeError(f"Tool 'target' item at index {idx} must be a string, got {type(single_target)}")
+
+            # Resolve target relative to CWD (Path default) before checking if it's inside project_root
+            resolved_target_path = Path(single_target).resolve()
+            if not resolved_target_path.exists():
+                 raise FileNotFoundError(f"Tool 'target' path '{single_target}' (resolved to {resolved_target_path}) does not exist.")
+            # Check if target is within project_root AFTER resolving
+            try:
+                resolved_target_path.relative_to(resolved_project_root_path)
+            except ValueError:
+                 raise ValueError(f"Tool 'target' path '{resolved_target_path}' is outside the specified project root '{resolved_project_root_path}'")
+
+            resolved_target_path_str = str(resolved_target_path)
+            resolved_target_paths_str.append(resolved_target_path_str)
+            logger.debug(f"Validated target path: {resolved_target_path_str}")
     else:
         logger.debug("No target provided. Processing entire project_root.")
-
+        # If no target, core_logic expects the project root itself as the target
+        resolved_target_paths_str = [resolved_project_root_path_str]
     # --- Validate against Server Root (if set) ---
     # The *project_root* provided by the client must be within the server's root (if set)
     if SERVER_ROOT_PATH:
@@ -125,8 +135,8 @@ async def read_context(
              raise ValueError(f"Tool project_root '{resolved_project_root_path}' is outside the allowed server root '{SERVER_ROOT_PATH}'")
 
     logger.info(f"Processing project_root: {resolved_project_root_path_str}")
-    if resolved_target_path_str:
-        logger.info(f"Focusing on target: {resolved_target_path_str}")
+    if target: # Log only if user actually provided targets
+        logger.info(f"Focusing on target(s): {resolved_target_paths_str}")
     # --- Call Core Logic ---
     log_capture_buffer = None
     temp_handler = None
@@ -158,16 +168,9 @@ async def read_context(
                 # as we remove the handler later, but good practice if we were restoring level.
 
 
-        # Adapt server args (mandatory project_root, optional target)
-        # to core_logic args (list of targets, optional project_root for relativity)
-        effective_target_paths_str: List[str]
-        if resolved_target_path_str:
-            # If target is given, it's the single path to process
-            effective_target_paths_str = [resolved_target_path_str]
-        else:
-            # If no target is given, process the project root itself
-            effective_target_paths_str = [resolved_project_root_path_str]
-
+        # Pass the validated list of target paths (or the project root if no target was given)
+        # The variable resolved_target_paths_str already holds the correct list.
+        effective_target_paths_str = resolved_target_paths_str
         # Call the core logic function
         result_content = core_read_context(
             target_paths_str=effective_target_paths_str,
@@ -178,7 +181,7 @@ async def read_context(
             debug_explain=debug_explain # Pass flag down
             # include_size_in_list is False by default in core_logic if not passed
         )
-        logger.debug(f"Finished processing project_root: {resolved_project_root_path_str}, target: {resolved_target_path_str}. Result length: {len(result_content)}")
+        logger.debug(f"Finished processing project_root: {resolved_project_root_path_str}, target(s): {resolved_target_paths_str}. Result length: {len(result_content)}")
 
         if debug_explain and log_capture_buffer:
             debug_output = log_capture_buffer.getvalue()
@@ -191,11 +194,11 @@ async def read_context(
 
     except (FileNotFoundError, ContextSizeExceededError, ValueError, DetailedContextSizeError) as e:
         # Let FastMCP handle converting these known errors
-        logger.error(f"Error during read_context call for project_root='{resolved_project_root_path_str}', target='{resolved_target_path_str}': {type(e).__name__} - {e}")
+        logger.error(f"Error during read_context call for project_root='{resolved_project_root_path_str}', target(s)='{resolved_target_paths_str}': {type(e).__name__} - {e}")
         raise e # Re-raise for FastMCP
     except Exception as e:
         # Log unexpected errors before FastMCP potentially converts to a generic 500
-        logger.exception(f"Unexpected error processing project_root='{resolved_project_root_path_str}', target='{resolved_target_path_str}': {type(e).__name__} - {e}")
+        logger.exception(f"Unexpected error processing project_root='{resolved_project_root_path_str}', target(s)='{resolved_target_paths_str}': {type(e).__name__} - {e}")
         raise e
     finally:
         # --- Cleanup: Remove temporary handler ---
