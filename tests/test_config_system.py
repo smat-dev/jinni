@@ -1,146 +1,132 @@
-import unittest
-import tempfile
+import pytest
 import os
 from pathlib import Path
+from typing import List, Optional, Dict
 
-# Import the actual functions from the implementation module
-from jinni.config_system import parse_rules, check_item, RuleCache # Assuming check_item handles file reading internally
+import pathspec # Direct import, assume it's installed
+# Import the refactored functions and constants
+from jinni.config_system import (
+    load_rules_from_file,
+    compile_spec_from_rules,
+    DEFAULT_RULES, # Import to potentially check its content or use in tests
+    CONTEXT_FILENAME
+)
 
-class TestConfigSystemParsing(unittest.TestCase):
+# --- Tests for load_rules_from_file ---
 
-    def test_parse_empty_string(self):
-        """Test parsing an empty string."""
-        # No need to create a file, just parse empty content
-        rules = parse_rules("")
-        self.assertEqual(rules, [])
+def test_load_rules_non_existent_file(tmp_path: Path):
+    """Test loading rules from a file that does not exist."""
+    non_existent_file = tmp_path / "no_such_file.rules"
+    rules = load_rules_from_file(non_existent_file)
+    assert rules == []
 
-    def test_parse_comments_and_empty_lines(self):
-        """Test that comments and empty lines are ignored when parsing content."""
-        content = """
-# This is a comment
+def test_load_rules_basic_file(tmp_path: Path):
+    """Test loading rules from a simple file."""
+    rule_file = tmp_path / "test.rules"
+    content = "*.py\n!config.py\n# A comment\n\nbuild/"
+    rule_file.write_text(content, encoding='utf-8')
+    rules = load_rules_from_file(rule_file)
+    # load_rules_from_file should return raw lines including comments/empty
+    expected_lines = ["*.py", "!config.py", "# A comment", "", "build/"]
+    assert rules == expected_lines
 
-!*.log
-# Another comment
+def test_load_rules_empty_file(tmp_path: Path):
+    """Test loading rules from an empty file."""
+    rule_file = tmp_path / "empty.rules"
+    rule_file.touch()
+    rules = load_rules_from_file(rule_file)
+    assert rules == [] # read_text().splitlines() on empty file gives [''] which becomes [] after loop? No, splitlines() on empty string is [].
 
-include_this.txt
+def test_load_rules_read_error(tmp_path: Path, monkeypatch):
+    """Test handling of file read errors during loading."""
+    rule_file = tmp_path / "unreadable.rules"
+    rule_file.touch() # Create the file
 
-        """
-        # Parse the string content directly
-        rules = parse_rules(content)
-        # Expected: only the valid rules are returned
-        self.assertCountEqual(rules, [('exclude', '*.log'), ('include', 'include_this.txt')])
+    # Simulate read error
+    def mock_read_text(*args, **kwargs):
+        raise OSError("Permission denied")
+    monkeypatch.setattr(Path, "read_text", mock_read_text)
 
-    def test_parse_basic_rules(self):
-        """Test parsing basic include and exclude rules from content."""
-        content = """
-!*.pyc
-*.py
-!temp/
-config.json
-        """
-        # Parse the string content directly
-        rules = parse_rules(content)
-        expected_rules = [
-            ('exclude', '*.pyc'),
-            ('include', '*.py'),
-            ('exclude', 'temp/'),
-            ('include', 'config.json')
-        ]
-        self.assertCountEqual(rules, expected_rules)
+    rules = load_rules_from_file(rule_file)
+    assert rules == [] # Should return empty list on error
 
-# Add more test cases for parsing edge cases later
+# --- Tests for compile_spec_from_rules ---
 
+def test_compile_empty_list():
+    """Test compiling an empty list of rules."""
+    spec = compile_spec_from_rules([], "Empty List")
+    assert isinstance(spec, pathspec.PathSpec)
+    assert len(spec.patterns) == 0 # Should be an empty spec
 
-# (Dummy check_item function removed, will use imported version)
+def test_compile_comments_and_empty_lines():
+    """Test that comments and empty lines are ignored during compilation."""
+    rules = [
+        "# This is a comment",
+        "",
+        "*.log", # Include logs
+        "!important.log", # Exclude specific log
+        " # Another comment",
+        "",
+        "src/",
+        "",
+    ]
+    spec = compile_spec_from_rules(rules, "Comments and Empty")
+    assert isinstance(spec, pathspec.PathSpec)
+    # Check if patterns were correctly identified
+    assert spec.match_file("debug.log")
+    assert not spec.match_file("important.log") # Last match for important.log is !important.log
+    assert spec.match_file("src/main.py")
+    assert spec.match_file("src/") # Should match directory itself if pattern is 'src/'
+    # Count valid patterns compiled
+    assert len(spec.patterns) == 3 # *.log, !important.log, src/
 
-class TestConfigSystemHierarchy(unittest.TestCase):
+def test_compile_basic_patterns():
+    """Test compiling basic gitignore-style patterns."""
+    rules = [
+        "*.py",
+        "!tests/",
+        "docs/*.md",
+        "/config.yaml",
+    ]
+    spec = compile_spec_from_rules(rules, "Basic Patterns")
+    assert isinstance(spec, pathspec.PathSpec)
+    assert spec.match_file("main.py")
+    assert spec.match_file("utils/helper.py")
+    assert not spec.match_file("tests/test_main.py") # Excluded by !tests/
+    assert not spec.match_file("tests/")
+    assert spec.match_file("docs/README.md")
+    assert not spec.match_file("other/README.md") # Not matched by docs/*.md
+    assert spec.match_file("config.yaml") # Anchored to root
+    assert not spec.match_file("sub/config.yaml") # Anchored, shouldn't match sub
 
-    def setUp(self):
-        """Create a temporary directory structure for hierarchy tests."""
-        self.test_dir = tempfile.TemporaryDirectory()
-        self.root_path = Path(self.test_dir.name)
+def test_compile_invalid_pattern_line():
+    """Test handling of invalid lines during compilation."""
+    # pathspec is generally robust, but some patterns might cause issues or be ignored.
+    # An empty negation '!' is invalid.
+    rules = ["*.py", "[invalid", "!"]
+    spec = compile_spec_from_rules(rules, "Invalid Lines")
+    # Expect an empty spec because pathspec raises error on '!'
+    assert isinstance(spec, pathspec.PathSpec)
+    assert len(spec.patterns) == 0
 
-        # Create structure for hierarchy tests:
-        # root/
-        #   .contextfiles (!*.log, sub/*_include_root.txt)
-        #   file_root.txt (include - no rules)
-        #   skip_default.log (exclude - rule in root)
-        #   .hidden_file (exclude - default hidden)
-        #   .git/ (exclude - default dir)
-        #     config
-        #   sub/
-        #     .contextfiles (!file_sub.txt)
-        #     file_sub.txt (exclude - rule in sub)
-        #     file_sub_include_root.txt (include - rule in root)
-        #     subsub/
-        #       file_subsub.txt (include - no rules)
+def test_compile_only_invalid_patterns():
+    """Test compiling only invalid patterns."""
+    rules = ["[invalid", "!"]
+    spec = compile_spec_from_rules(rules, "Only Invalid")
+    assert isinstance(spec, pathspec.PathSpec)
+    assert len(spec.patterns) == 0
 
-        (self.root_path / "sub" / "subsub").mkdir(parents=True, exist_ok=True)
-        (self.root_path / ".git").mkdir(exist_ok=True)
+def test_default_rules_compilation():
+    """Test that the default rules compile without errors."""
+    # This is a basic sanity check
+    spec = compile_spec_from_rules(DEFAULT_RULES, "Default Rules")
+    assert isinstance(spec, pathspec.PathSpec)
+    # Check a few default exclusions - .git/ pattern SHOULD match files inside
+    assert not spec.match_file(".git/config") # Test that the pattern correctly excludes a file inside .git
+    assert not spec.match_file("node_modules/package/index.js")
+    assert not spec.match_file("__pycache__/some.cpython-39.pyc")
+    # Check something not excluded by default
+    assert spec.match_file("src/main.py") # Defaults include '*' first, so this should be included
 
-        (self.root_path / ".contextfiles").write_text("!*.log\nsub/*_include_root.txt\n", encoding='utf-8')
-        (self.root_path / "file_root.txt").touch()
-        (self.root_path / "skip_default.log").touch()
-        (self.root_path / ".hidden_file").touch()
-        (self.root_path / ".git" / "config").touch()
-
-        (self.root_path / "sub" / ".contextfiles").write_text("!file_sub.txt\n", encoding='utf-8')
-        (self.root_path / "sub" / "file_sub.txt").touch()
-        (self.root_path / "sub" / "file_sub_include_root.txt").touch()
-
-        (self.root_path / "sub" / "subsub" / "file_subsub.txt").touch()
-        # Initialize cache for each test method if needed, or pass None
-        self.cache: RuleCache = {}
-
-
-    def tearDown(self):
-        """Clean up the temporary directory."""
-        self.test_dir.cleanup()
-
-    def test_default_exclusions(self):
-        """Test that default exclusions work (e.g., .git, hidden files)."""
-        # Use the imported check_item - check the boolean part of the tuple
-        self.assertFalse(check_item(self.root_path / ".git" / "config", self.root_path, contextfile_cache=self.cache)[0], ".git/config should be excluded")
-        self.assertFalse(check_item(self.root_path / ".git", self.root_path, contextfile_cache=self.cache)[0], ".git dir should be excluded") # Check boolean part
-        self.assertFalse(check_item(self.root_path / ".hidden_file", self.root_path, contextfile_cache=self.cache)[0], ".hidden_file should be excluded")
-
-
-    def test_root_contextfile_exclusion(self):
-        """Test exclusion rule in root .contextfiles."""
-        # Use the imported check_item - check the boolean part of the tuple
-        self.assertFalse(check_item(self.root_path / "skip_default.log", self.root_path, contextfile_cache=self.cache)[0], "*.log should be excluded by root .contextfiles")
-
-    def test_sub_contextfile_exclusion(self):
-        """Test exclusion rule in subdirectory .contextfiles."""
-        # Use the imported check_item - check the boolean part of the tuple
-        self.assertFalse(check_item(self.root_path / "sub" / "file_sub.txt", self.root_path, contextfile_cache=self.cache)[0], "file_sub.txt should be excluded by sub/.contextfiles")
-
-    def test_root_contextfile_inclusion(self):
-        """Test inclusion rule in root .contextfiles applying to subdirectory."""
-        # Use the imported check_item
-        self.assertTrue(check_item(self.root_path / "sub" / "file_sub_include_root.txt", self.root_path, contextfile_cache=self.cache), "file_sub_include_root.txt should be included by root .contextfiles")
-
-    def test_no_rule_match_inclusion(self):
-        """Test that files with no matching rules are included by default."""
-        # Use the imported check_item
-        self.assertTrue(check_item(self.root_path / "sub" / "subsub" / "file_subsub.txt", self.root_path, contextfile_cache=self.cache), "file_subsub.txt should be included as no rules match")
-        self.assertTrue(check_item(self.root_path / "file_root.txt", self.root_path, contextfile_cache=self.cache)[0], "file_root.txt should be included as no rules match")
-
-    def test_default_exclusion_root_log_file(self):
-        """Test that a .log file in the root is excluded by default **/*.log rule."""
-        # Create a dummy log file directly in the root
-        log_file_path = self.root_path / "my_root.log"
-        log_file_path.touch()
-        # Use the imported check_item - check the boolean part of the tuple
-        included, reason = check_item(log_file_path, self.root_path, contextfile_cache=self.cache, explain_mode=True)
-        print(f"Check result for {log_file_path.name}: Included={included}, Reason='{reason}'") # Add print for debugging in test output
-        self.assertFalse(included, f"Root file {log_file_path.name} should be excluded by default rules, but reason was: {reason}")
-
-    # --- Tests for Inline/Global Rules (Add later once basic hierarchy works) ---
-    # def test_inline_rule_overrides_contextfile(self): ...
-    # def test_global_rule_overrides_default(self): ...
-    # def test_contextfile_overrides_global(self): ...
-
-
-if __name__ == '__main__':
-    unittest.main()
+# --- Remove tests for check_item and find_and_compile_contextfile ---
+# All tests below this line from the original file are removed.

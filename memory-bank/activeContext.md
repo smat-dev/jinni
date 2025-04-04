@@ -7,7 +7,7 @@
 
 ## Current Focus
 
-*   [2025-04-03 16:27:00] - Current focus is implementing the approved redesign of `core_logic.py` to fix directory exclusion during traversal. This takes precedence over Task 10 (multi-path CLI).
+*   [2025-04-04 13:04:30] - Current focus is implementing the finalized re-architecture plan: dynamic `PathSpec` compilation during traversal in `core_logic.py`, handling `.contextfiles` hierarchy, implementing overrides, ensuring explicit target inclusion, and updating CLI, server, docs, and tests accordingly.
 
 ## Recent Changes
 
@@ -26,7 +26,10 @@
 *   [2025-04-02 19:29:52] - Completed initial update of README.md (Task 6).
 *   [2025-04-02 19:30:16] - Added Task 7: Implement Integration Tests (High Priority) based on user feedback.
 *   [2025-04-03 16:27:00] - Approved plan to redesign `core_logic.py` directory traversal logic. Updated `decisionLog.md`.
-
+*   [2025-04-03 17:22:00] - Approved major redesign of `.contextfiles` system (see `decisionLog.md`). Updated `DESIGN.md`, `README.md`, `productContext.md`, and `decisionLog.md`.
+*   [2025-04-04 01:24:12] - Changed rule precedence logic based on user feedback: Inline rules now completely override local `.contextfiles`. Updated `config_system.py`, `DESIGN.md`, `README.md`, `decisionLog.md`.
+*   [2025-04-04 12:33:00] - Approved major re-architecture of config system and core logic (see `decisionLog.md`). This involves factoring out rule building, using `pathlib`, unifying CLI/MCP override behavior, and updating related components (CLI, docs, tests).
+*   [2025-04-04 13:04:30] - Finalized the re-architecture plan (see `decisionLog.md`) to use dynamic `PathSpec` compilation during traversal, incorporating feedback on `.contextfile` handling and explicit target inclusion.
 ## Open Questions/Issues
 *   [2025-04-02 19:16:35] - Feature Request: Allow CLI to accept multiple directory/file paths as positional arguments, avoiding duplicate output.
 *   [2025-04-02 19:16:35] - Feature Request: Add new MCP tool `read_context_list` to handle multiple paths and avoid duplicates, similar to the CLI request.

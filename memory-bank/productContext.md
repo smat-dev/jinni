@@ -13,8 +13,8 @@ This file provides a high-level overview of the project and the expected product
 
 *   MCP Server providing a `dump_code` tool.
 *   `jinni` command-line utility for manual context dumping.
-*   Hierarchical whitelisting/blacklisting of files/directories using `.contextfiles` and regex.
-*   Sensible default exclusions for common development artifacts.
+*   Hierarchical, `.gitignore`-style filtering using `.contextfiles` and the `pathspec` library (`gitwildmatch` syntax). Files are included by default, but common patterns (like `.git/`, `node_modules/`, dotfiles) are excluded by built-in rules unless explicitly included by user rules.
+*   Exclusion patterns (`!`) override inclusion patterns.
 *   Ability to list files only (`list_only` parameter).
 *   Handles large context sizes (mentions aborting if >100MB).
 *   Skips common build artifacts, logs, VCS folders, binaries.
@@ -25,9 +25,12 @@ This file provides a high-level overview of the project and the expected product
 
 *   Python-based MCP server using the `mcp.server.fastmcp` library.
 *   Communicates via stdio transport.
-*   Core logic involves walking directory trees (`os.walk`), filtering files/directories based on rules (`should_skip`), reading file content, and formatting output.
-*   Includes a separate CLI component (`jinni`).
+*   Core logic involves traversing directory trees (`os.walk`), dynamically determining the applicable rule set (`pathspec`) for each directory based on `.contextfiles` encountered from the root down (unless overrides are active), and applying these rules for filtering. Explicitly specified targets are always included. Uses `pathlib`.
+*   Includes a separate CLI component (`jinni`) with override behavior (`--overrides` flag) that mirrors MCP server override behavior.
 
 ---
 *Footnotes:*
 [2025-04-02 18:13:08] - Updated Project Goal, Key Features, and Overall Architecture based on README.md and prototype.py analysis after initial codedump.
+[2025-04-03 17:21:00] - Updated Key Features and Overall Architecture to reflect the major redesign of the configuration system to use `.gitignore`-style inclusion logic via `pathspec`.
+[2025-04-04 12:32:00] - Updated Overall Architecture to reflect the re-design of rule building (unified set per target) and unified override handling for CLI/MCP.
+[2025-04-04 13:04:00] - Further updated Overall Architecture to reflect dynamic rule compilation during traversal based on `.contextfiles` hierarchy, and the explicit inclusion of target paths.

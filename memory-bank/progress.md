@@ -1,27 +1,27 @@
 # Progress
 
 This file tracks the project's progress using a task list format.
-2025-04-02 18:07:39 - Log of updates made.
+[2025-04-04 15:57:00] - Cleaned up task list for clarity.
 
 *
 
 ## Completed Tasks
 
-*   [2025-04-02 18:46:33] - Task 1: Detailed Design & Documentation (Components, `.contextfiles`, README draft) - Completed. See DESIGN.md, PLAN.md, README.md.
-*   [2025-04-02 19:29:52] - Task 6: Finalize Documentation - Initial README.md update completed (added setup, usage examples, dev links). Further refinement pending.
+*   [2025-04-02 18:46:33] - Task 1: Detailed Design & Documentation - Initial version completed. [2025-04-03 17:23:00] - Updated DESIGN.md and README.md significantly to reflect major `.contextfiles` redesign (Gitignore-style inclusion).
+*   [2025-04-04 15:45:00] - Task 8: Implement Binary File Detection - Verified implementation using `mimetypes` and null-byte fallback in `core_logic.py`. [2025-04-04 15:46:00] - Refined: Binary check now applies even when `-l`/`--list-only` flag is used, ensuring list output matches content output regarding binary exclusion.
+*   [2025-04-04 15:50:00] - Task 16: Implement CLI Clipboard Copy Feature - Added `-c`/`--copy` flag to `jinni/cli.py` using `pyperclip`. Updated `requirements.txt`, `README.md`, `DESIGN.md`, and `decisionLog.md`. [2025-04-04 15:51:00] - Refined: Changed to copy-by-default for stdout, added `--no-copy` flag. Updated CLI script and documentation.
+*   [2025-04-04 15:55:00] - Task 17: Default CLI Path Argument to Current Directory - Modified `jinni/cli.py` to make the `paths` argument optional (nargs='*', default=['.']). Updated `README.md`, `DESIGN.md`, and `decisionLog.md`.
+*   [2025-04-04 15:58:00] - Task 10: Implement Multi-Path CLI Input - Completed as part of Task 17 (changing `paths` nargs to `'*'`).
 
-## Current Tasks
+## Current Major Task
 
-*   [2025-04-02 18:46:33] - Task 2: Develop Tests (Unit tests for Core Logic & Config; Integration test setup) - Initial tests written (`tests/`) and passing after debug fixes [2025-04-02 19:07:54]. Integration test setup pending.
-*   [2025-04-02 18:53:40] - Task 3: Implement Core Logic & Configuration System - Initial implementation created (`jinni/`) and passing initial unit tests after debug fixes [2025-04-02 19:07:54]. [2025-04-03 16:29:00] - Implemented directory pruning logic in `core_logic.py`'s `os.walk` loop to correctly handle exclusions.
-*   [2025-04-02 19:13:08] - Task 4: Implement `jinni` MCP Server - Initial implementation created (`jinni/server.py`). Testing pending.
-*   [2025-04-02 19:14:20] - Task 5: Implement `jinni` CLI - Initial implementation created (`jinni/cli.py`). Testing pending.
+*   [2025-04-04 13:05:00] - **Task 15: Re-architect Config System & Core Logic (Dynamic Traversal)**
+    *   **Goal:** Implement dynamic `PathSpec` compilation during traversal (`core_logic.py`), handle `.contextfiles` hierarchy, implement overrides, ensure explicit target inclusion.
+    *   **Includes:** Updating CLI (`--overrides`), server, unit tests (Task 2), integration tests (Task 7), and documentation (Task 6) to align with the new architecture.
+    *   *(Note: Tasks 3, 4, 5, 11, 12, 13, 14 are effectively superseded or incorporated into this task).*
 
-## Next Steps
+## Pending Tasks (Post-Refactor)
 
-*   Run & Refine Unit Tests (Task 2/3).
-*   Finalize Documentation (Task 6).
-*   [2025-04-02 19:30:16] - Task 7: Implement Integration Tests (High Priority) - Initial CLI and MCP tests implemented (`tests/test_integration.py`), covering basic invocation, `.contextfiles`, `--list-only`, `--config`, and inline MCP rules.
-*   [2025-04-02 19:52:56] - Task 8: Implement Binary File Detection - Add logic to identify and optionally skip files detected as binary content.
-*   [2025-04-02 19:52:56] - Task 9: Implement Debug Explain Option - Add a CLI flag and MCP argument to output the reasoning behind including/excluding each file/directory.
-*   [2025-04-03 14:48:31] - Task 10: Implement Multi-Path CLI Input - Modify CLI and core logic to accept multiple file/directory paths as input. (Pivoting focus to this task).
+*   [2025-04-02 19:52:56] - Task 9: Implement Debug Explain Option (`--debug-explain`).
+*   Task 6: Final review and update of all documentation (`README.md`, `DESIGN.md`).
+*   Task TBD: Address distribution/installation method (Python/pip vs Node.js/npm).

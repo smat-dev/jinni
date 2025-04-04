@@ -22,12 +22,14 @@ Jinni achieves this through two main components: an MCP (Model Context Protocol)
 ## Features
 
 *   **Efficient Context Gathering:** Reads and concatenates relevant project files in one operation.
-*   **Intelligent Filtering:**
-    *   Applies sensible default exclusions for common development artifacts (VCS directories, build outputs, logs, dependencies like `node_modules`, `venv`, etc.).
-    *   Supports hierarchical configuration using `.contextfiles` placed within your project directories.
-*   **Customizable Configuration (`.contextfiles`):**
-    *   Fine-tune file/directory inclusion and exclusion using glob patterns.
-    *   Override default rules on a per-directory basis. (See Configuration section below).
+*   **Intelligent Filtering (Gitignore-Style Inclusion):**
+    *   Uses a system based on `.gitignore` syntax (`pathspec` library's `gitwildmatch`).
+    *   Supports hierarchical configuration using `.contextfiles` placed within your project directories. Rules are applied dynamically based on the file/directory being processed.
+    *   **Overrides:** Supports `--overrides` (CLI) or `rules` (MCP) to completely replace `.contextfiles` logic for specific runs.
+    *   **Explicit Target Inclusion:** Files/directories explicitly provided as input paths are *always* included/traversed.
+   *   **Customizable Configuration (`.contextfiles` / Overrides):**
+       *   Define precisely which files/directories to include or exclude using `.gitignore`-style patterns.
+       *   Patterns starting with `!` negate the match (an exclusion pattern). (See Configuration section below).
 *   **Large Context Handling:** Aborts with an error if the total size of included files exceeds a configurable limit (default: 100MB) to prevent excessive output.
 *   **Metadata Headers:** Output includes file path, size, and modification time for each included file (can be disabled with `list_only`).
 *   **Encoding Handling:** Attempts multiple common text encodings (UTF-8, Latin-1, etc.).
@@ -39,11 +41,12 @@ Jinni achieves this through two main components: an MCP (Model Context Protocol)
 
 1.  **Setup:** Configure your MCP client (e.g., Claude Desktop's `claude_desktop_config.json`) to run the `jinni` server executable.
 2.  **Invocation:** When interacting with your LLM via the MCP client, the model can invoke the `read_context` tool.
-    *   **`path` (string, required):** The absolute path to the project directory to analyze. This path is used as the base for finding `.contextfiles`.
-    *   **`root` (string, optional):** An absolute path *within* `path` to constrain the processing. If provided, only files/directories under this `root` will be walked and included. Defaults to `path`.
-    *   **`rules` (array of strings, optional):** A list of inline filtering rules (using `.contextfiles` syntax, e.g., `["!*.tmp", "include_this/"]`). These rules have the highest precedence, overriding any found in `.contextfiles` or global configs.
+    *   **`path` (string, required):** The absolute path to the target file or directory to analyze.
+    *   **`rules` (array of strings, optional):** A list of inline filtering rules (using `.gitignore`-style syntax, e.g., `["src/**/*.py", "!*.tmp"]`). If provided, these rules **override** and replace any `.contextfiles` logic.
     *   **`list_only` (boolean, optional):** If true, returns only the list of relative file paths instead of content.
-3.  **Output:** The tool returns a single string containing the concatenated content (with headers) or the file list.
+    *   **`size_limit_mb` (integer, optional):** Override the context size limit in MB.
+    *   **`debug_explain` (boolean, optional):** Enable debug logging on the server.
+    3.  **Output:** The tool returns a single string containing the concatenated content (with headers) or the file list. Paths in headers are relative to the common ancestor of the target(s) or the server's `--root` if set.
 
 *(Detailed server setup instructions will vary depending on your MCP client. Generally, you need to configure the client to execute the `jinni-server` command. For example, in Claude Desktop's `claude_desktop_config.json`):*
 
@@ -64,13 +67,17 @@ Jinni achieves this through two main components: an MCP (Model Context Protocol)
 ### Command-Line Utility (`jinni` CLI)
 
 ```bash
-jinni [OPTIONS] <PATH>
+jinni [OPTIONS] <PATH...>
 ```
 
-*   **`<PATH>` (required):** The path to the project directory to analyze.
-*   **`--output <FILE>` (optional):** Write the output to `<FILE>` instead of printing to standard output.
-*   **`--list-only` (optional):** Only list the relative paths of files that would be included.
-*   **`--config <FILE>` (optional):** Use a global configuration file (in `.contextfiles` format) applied before defaults and local `.contextfiles`.
+*   **`<PATH...>` (optional):** One or more paths to the project directories or files to analyze. Defaults to the current directory (`.`) if none are provided.
+*   **`--output <FILE>` / `-o <FILE>` (optional):** Write the output to `<FILE>` instead of printing to standard output.
+*   **`--list-only` / `-l` (optional):** Only list the relative paths of files that would be included.
+*   **`--overrides <FILE>` (optional):** Use rules from `<FILE>` instead of discovering `.contextfiles`.
+*   **`--size-limit-mb <MB>` / `-s <MB>` (optional):** Override the maximum context size in MB.
+*   **`--debug-explain` (optional):** Print detailed inclusion/exclusion reasons to stderr and `jinni_debug.log`.
+*   **`--output-relative-to <DIR>` (optional):** Make output file paths relative to `<DIR>` instead of the default (common ancestor or CWD).
+*   **`--no-copy` (optional):** Prevent automatically copying the output content to the system clipboard when printing to standard output (the default is to copy).
 
 ### Installation
 
@@ -92,60 +99,95 @@ npx jinni [OPTIONS] <PATH>
 
 *   **Dump context of `my_project/` to the console:**
     ```bash
-    jinni ./my_project/
+    jinni ./my_project/ # Process a single directory
+    jinni ./src ./docs/README.md # Process multiple targets
+    jinni # Process current directory (.)
     ```
 
 *   **List files that would be included in `my_project/` without content:**
     ```bash
-    jinni --list-only ./my_project/
+    jinni -l ./my_project/
+    jinni --list-only ./src ./docs/README.md
     ```
 
 *   **Dump context of `my_project/` to a file named `context_dump.txt`:**
     ```bash
-    jinni --output context_dump.txt ./my_project/
+    jinni -o context_dump.txt ./my_project/
     ```
 
-*   **Use a global rule set from `~/global_rules.contextfiles`:**
+*   **Use override rules from `custom.rules` instead of `.contextfiles`:**
     ```bash
-    jinni --config ~/global_rules.contextfiles ./my_project/
+    jinni --overrides custom.rules ./my_project/
+    ```
+*   **Show debug information:**
+    ```bash
+    jinni --debug-explain ./src
+    ```
+*   **Dump context (output is automatically copied to clipboard by default):**
+    ```bash
+    jinni ./my_project/
+    ```
+*   **Dump context but *do not* copy to clipboard:**
+    ```bash
+    jinni --no-copy ./my_project/
     ```
 
-## Configuration (`.contextfiles`)
+## Configuration (`.contextfiles` & Overrides)
 
-You can customize Jinni's filtering behavior by placing a file named `.contextfiles` in any directory within your project.
+Jinni uses `.contextfiles` (or an override file) to determine which files and directories to include or exclude, based on `.gitignore`-style patterns.
 
-*   **Format:** Plain text, UTF-8 encoded, one rule per line.
-*   **Comments:** Lines starting with `#` are ignored.
-*   **Exclusion Rules:** Lines starting with `!` exclude matching files/directories (e.g., `!*.log`, `!temp/`).
-*   **Inclusion Rules:** All other non-comment lines include matching files/directories, potentially overriding broader exclusions or defaults (e.g., `important.log`, `src/`).
-*   **Patterns:** Rules use standard [glob patterns](https://docs.python.org/3/library/fnmatch.html). Patterns ending with `/` match directories only. Patterns match relative paths from the directory containing the `.contextfiles`.
-*   **Hierarchy:** Inline rules (from MCP tool call) > Subdirectory `.contextfiles` > Parent Directory `.contextfiles` > Global Config (`--config` CLI option) > Default Exclusions. Within the same rule source, later rules take precedence over earlier rules. 
+*   **Core Principle:** Rules are applied dynamically during traversal. The effective rules for any given file/directory depend on the `.contextfiles` found in its parent directories (up to a common root) or the override rules.
+*   **Location (`.contextfiles`):** Place `.contextfiles` in any directory. Rules apply to that directory and its subdirectories, inheriting rules from parent directories.
+*   **Format:** Plain text, UTF-8 encoded, one pattern per line.
+*   **Syntax:** Uses standard `.gitignore` pattern syntax (specifically `pathspec`'s `gitwildmatch` implementation).
+    *   **Comments:** Lines starting with `#` are ignored.
+    *   **Inclusion Patterns:** Specify files/directories to include (e.g., `src/**/*.py`, `*.md`, `/config.yaml`).
+    *   **Exclusion Patterns:** Lines starting with `!` indicate that a matching file should be excluded (negates the pattern).
+    *   **Anchoring:** A leading `/` anchors the pattern to the directory containing the `.contextfiles`.
+    *   **Directory Matching:** A trailing `/` matches directories only.
+    *   **Wildcards:** `*`, `**`, `?` work as in `.gitignore`.
+*   **Rule Application Logic:**
+    1.  **Override Check:** If `--overrides` (CLI) or `rules` (MCP) are provided, these rules (combined with built-in defaults) are used exclusively. All `.contextfiles` are ignored.
+    2.  **Dynamic Context Rules (No Overrides):** When processing a file or directory, Jinni:
+        *   Finds all `.contextfiles` starting from a common root directory down to the current item's directory.
+        *   Combines the rules from these files (parent rules first, child rules last) along with built-in default rules.
+        *   Compiles these combined rules into a temporary specification (`PathSpec`).
+        *   Matches the current file/directory path (relative to the common root) against this specification.
+    3.  **Matching:** The **last pattern** in the combined rule set that matches the item determines its fate. If the last matching pattern starts with `!`, the item is excluded. Otherwise, it's included. If no user-defined pattern in the combined rule set matches the item, it is included *unless* it matches one of the built-in default exclusion patterns (e.g., `.git/`, `node_modules/`, common binary extensions). If no pattern matches at all (neither user nor default), the item is included. Explicitly provided targets are always included regardless of rules.
+    4.  **Explicit Target Inclusion:** Any file or directory path explicitly provided as a command-line argument is *always* included or traversed, regardless of matching rules. Rules *are* still applied to *contents* of explicitly included directories.
 
-### Examples
+### Examples (`.contextfiles`)
 
-**Example 1: Basic Exclusions**
+**Example 1: Include Python Source and Root Config**
 
 Located at `my_project/.contextfiles`:
 
 ```
-# Exclude all log files and the build directory
-!*.log
-!build/
+# Include all Python files in the src directory and subdirectories
+src/**/*.py
+
+# Include the main config file at the root of the project
+/config.json
+
+# Include all markdown files anywhere
+*.md
+
+# Exclude any test data directories found anywhere
+!**/test_data/
 ```
 
-**Example 2: Including Specific Files/Directories**
+**Example 2: Overriding in a Subdirectory**
 
 Located at `my_project/src/.contextfiles`:
 
 ```
-# Include everything in src by default (overrides potential parent exclusions)
-*
+# In addition to rules inherited from parent .contextfiles...
 
-# But exclude temporary files within src
-!*.tmp
+# Include specific utility scripts in this directory
+utils/*.sh
 
-# Explicitly include a specific config file even if logs are excluded elsewhere
-important_config.log
+# Exclude a specific generated file within src, even if *.py is included elsewhere
+!generated_parser.py
 ```
 
 ## Development
