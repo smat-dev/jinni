@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10" # Minimum Python version required by dependencies (e.g., mcp)
 license = { text = "Apache-2.0" }
 authors = [
-  { name = "Your Name", email = "your.email@example.com" }, # Placeholder - User should update
+  { name = "Solomon Matthews", email = "dev@sdmatthews.com" },
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -31,8 +31,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-username/jinni" # Placeholder - User should update
-Repository = "https://github.com/your-username/jinni" # Placeholder - User should update
+Homepage = "https://github.com/smat-dev/jinni"
+Repository = "https://github.com/smat-dev/jinni"
 
 [project.scripts]
 jinni = "jinni.cli:main"
