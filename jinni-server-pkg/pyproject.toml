@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jinni-server"
-version = "0.1.2" # Match the main jinni package version
+version = "0.1.3" # Match the main jinni package version
 description = "Server component for Jinni (enables 'uvx jinni-server')."
 readme = "README.md" # Optional: Create a simple README for this package
 requires-python = ">=3.10" # Match the main jinni package requirement
