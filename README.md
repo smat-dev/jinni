@@ -81,7 +81,7 @@ The MCP server can provide as much or as little of the project as desired. By de
       "mcpServers": {
         "jinni": {
           "command": "uvx jinni-server"
-          // Optionally constrain the server root:
+          // Optionally constrain the server to only read within a tree (recommended for security):
           // "command": "uvx jinni-server --root /absolute/path/"
         }
       }
@@ -232,7 +232,7 @@ utils/*.sh
         "jinni": {
           // Adjust python path if needed, or ensure the correct environment is active
           "command": "python -m jinni.server"
-          // Optionally constrain the server root:
+          // Optionally constrain the server to only read within a tree (recommended for security):
           // "command": "python -m jinni.server --root /absolute/path/to/repo"
         }
       }
