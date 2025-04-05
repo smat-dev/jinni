@@ -29,9 +29,6 @@ The MCP server can provide as much or as little of the project as desired. By de
     *   A command-line tool for manually generating the project context dump.
     *   Useful feeding context to LLMs via copy-paste or file input. Or pipe the output wherever you need it.
 
-3.  **`jinni usage` / `usage` Tool:**
-    *   A simple command (`jinni --usage` via CLI) or MCP tool (`usage`) that displays the content of this README file. Useful for quick reference within the terminal or via an MCP client.
-
 ## Features
 
 *   **Efficient Context Gathering:** Reads and concatenates relevant project files in one operation.
