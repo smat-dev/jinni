@@ -8,7 +8,7 @@ def test_cli_with_contextfiles(test_environment: Path):
     """Test CLI run respecting hierarchical .contextfiles (dynamic rule application)."""
     test_dir = test_environment
     # Run with the project directory as the root, no specific target
-    stdout, stderr = run_jinni_cli(["-r", str(test_dir)])
+    stdout, stderr = run_jinni_cli(["-r", str(test_dir), "--no-copy"])
 
     # Expected includes based on conftest.py setup and dynamic rules:
     # Root .contextfiles: file_root.txt, *.md, src/, dir_c/, dir_e/, dir_f/, !*.log, !*.tmp
@@ -61,7 +61,7 @@ def test_cli_with_contextfiles(test_environment: Path):
 def test_cli_list_only(test_environment: Path):
     """Test the --list-only CLI flag with dynamic rules."""
     test_dir = test_environment
-    stdout, stderr = run_jinni_cli(["-r", str(test_dir), "--list-only"])
+    stdout, stderr = run_jinni_cli(["-r", str(test_dir), "--list-only", "--no-copy"])
 
     expected_files = sorted([
         "README.md",
@@ -98,7 +98,7 @@ def test_cli_overrides(test_environment: Path): # Renamed from test_cli_global_c
         , encoding='utf-8'
     )
     # Use --overrides with project root
-    stdout, stderr = run_jinni_cli(["-r", str(test_dir), "--overrides", str(overrides_path)])
+    stdout, stderr = run_jinni_cli(["-r", str(test_dir), "--overrides", str(overrides_path), "--no-copy"])
 
     # Expected includes based ONLY on override rules + defaults:
     # Overrides: *.py, !main.py, dir_b/, README.md
