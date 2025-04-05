@@ -50,48 +50,63 @@ APPLICATION_TEXT_MIMES = {
 
 # --- Constants for Shared Usage Documentation ---
 ESSENTIAL_USAGE_DOC = """
-**Jinni Context Filtering Rules & .contextfiles**
+**Jinni: Configuration (`.contextfiles` & Overrides)**
 
-**1. Filtering Rules:**
+Jinni uses `.contextfiles` (or an override file) to determine which files and directories to include or exclude, based on `.gitignore`-style patterns.
 
-*   **Purpose:** Control which files and directories are included or excluded when reading context.
-*   **Inline Rules (via `read_context` tool):**
-    *   Pass a JSON array of strings to the `rules` argument.
-    *   Rules are processed in order.
-    *   Format: `[+/-][type:]pattern`
-        *   `+` (Include) / `-` (Exclude) - Default is `+` if omitted.
-        *   `type:` (Optional) `d:` for directory, `f:` for file. If omitted, applies to both.
-        *   `pattern:` Glob pattern (e.g., `*.py`, `__pycache__/`, `tests`).
-    *   Example: `["-*.log", "-d:node_modules", "+f:*.py", "+d:src"]` (Exclude logs and node_modules, include Python files and the src directory).
-*   **Default Rules:** If `rules` is empty (`[]`), Jinni uses built-in defaults (e.g., excludes `.git`, `__pycache__`).
+*   **Core Principle:** Rules are applied dynamically during traversal. The effective rules for any given file/directory depend on the `.contextfiles` found in its parent directories (up to a common root) or the override rules.
+*   **Location (`.contextfiles`):** Place `.contextfiles` in any directory. Rules apply to that directory and its subdirectories, inheriting rules from parent directories.
+*   **Format:** Plain text, UTF-8 encoded, one pattern per line.
+*   **Syntax:** Uses standard `.gitignore` pattern syntax (specifically `pathspec`'s `gitwildmatch` implementation). **This syntax applies to rules in `.contextfiles`, the `rules` MCP argument, and the `--overrides` CLI file.**
+    *   **Comments:** Lines starting with `#` are ignored.
+    *   **Inclusion Patterns:** Specify files/directories to include (e.g., `src/**/*.py`, `*.md`, `/config.yaml`).
+    *   **Exclusion Patterns:** Lines starting with `!` indicate that a matching file should be excluded (negates the pattern).
+    *   **Anchoring:** A leading `/` anchors the pattern to the directory containing the `.contextfiles`.
+    *   **Directory Matching:** A trailing `/` matches directories only.
+    *   **Wildcards:** `*`, `**`, `?` work as in `.gitignore`.
+*   **Rule Application Logic:**
+    1.  **Override Check:** If `--overrides` (CLI) or `rules` (MCP) are provided, these rules are used exclusively. All `.contextfiles` and built-in defaults are ignored.
+    2.  **Dynamic Context Rules (No Overrides):** When processing a file or directory, Jinni:
+        *   Finds all `.contextfiles` starting from a common root directory down to the current item's directory.
+        *   Combines the rules from these files (parent rules first, child rules last) along with built-in default rules.
+        *   Compiles these combined rules into a temporary specification (`PathSpec`).
+        *   Matches the current file/directory path (relative to the common root) against this specification.
+    3.  **Matching:** The **last pattern** in the combined rule set that matches the item determines its fate. If the last matching pattern starts with `!`, the item is excluded. Otherwise, it's included. If no user-defined pattern in the combined rule set matches the item, it is included *unless* it matches one of the built-in default exclusion patterns (e.g., `.git/`, `node_modules/`, common binary extensions). If no pattern matches at all (neither user nor default), the item is included.
+    4.  **Target Handling:** If specific `targets` are provided (CLI or MCP), they are validated to be within the `project_root`. If a target is a file, only that file is processed (rule checks don't apply to the target file itself, but binary/size checks do). If a target is a directory, the walk starts there, but rules are still applied relative to the `project_root`.
 
-**2. Persistent Rules (`.contextfiles`):**
+**Examples (`.contextfiles`)**
 
-*   **Purpose:** Define project-specific rules that are automatically applied.
-*   **Location:** Place a file named `.contextfiles` in the *project root* directory (the one passed as `project_root` to `read_context`).
-*   **Format:** Same as inline rules, one rule per line. Blank lines and lines starting with `#` are ignored.
-*   **Priority:** Rules from `.contextfiles` are applied *before* any inline rules provided via the `rules` argument.
-*   **Example `.contextfiles`:**
-    ```
-    # Exclude build artifacts
-    -d:build/
-    -d:dist/
+**Example 1: Include Python Source and Root Config**
 
-    # Always include config files
-    +*.yaml
-    +*.json
+Located at `my_project/.contextfiles`:
 
-    # Exclude specific test data
-    -tests/data/large_files/
-    ```
+```
+# Include all Python files in the src directory and subdirectories
+src/**/*.py
 
-**Combining Rules:**
+# Include the main config file at the root of the project
+/config.json
 
-1.  Default rules are applied first.
-2.  Rules from `.contextfiles` (if found in the project root) are applied next, potentially overriding defaults.
-3.  Inline rules from the `rules` argument are applied last, potentially overriding `.contextfiles` and defaults.
+# Include all markdown files anywhere
+*.md
 
-Use `debug_explain=True` in `read_context` to see how rules are applied to specific files/directories.
+# Exclude any test data directories found anywhere
+!**/test_data/
+```
+
+**Example 2: Overriding in a Subdirectory**
+
+Located at `my_project/src/.contextfiles`:
+
+```
+# In addition to rules inherited from parent .contextfiles...
+
+# Include specific utility scripts in this directory
+utils/*.sh
+
+# Exclude a specific generated file within src, even if *.py is included elsewhere
+!generated_parser.py
+```
 """
 
 # --- Helper Functions (Moved from core_logic.py) ---
