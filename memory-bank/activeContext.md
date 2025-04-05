@@ -7,7 +7,7 @@
 
 ## Current Focus
 
-*   [2025-04-04 13:04:30] - Current focus is implementing the finalized re-architecture plan: dynamic `PathSpec` compilation during traversal in `core_logic.py`, handling `.contextfiles` hierarchy, implementing overrides, ensuring explicit target inclusion, and updating CLI, server, docs, and tests accordingly.
+*   [2025-04-06 00:48:03] - Current focus is migrating the project distribution from Node.js (`npm`/`npx`) to Python (`uv`/`uvx`/PyPI). This involves removing Node.js artifacts, creating `pyproject.toml`, updating documentation (`README.md`), and updating Memory Bank files.
 
 ## Recent Changes
 
@@ -43,8 +43,10 @@
 *   [2025-04-05 22:45:00] - Reverted MCP `read_context` tool behavior: `targets` is mandatory but allows empty list (`[]`) to process project root. `rules` remains mandatory (allows `[]`). Updated server code, `README.md`, and Memory Bank files (`productContext.md`, `decisionLog.md`).
 *   [2025-04-05 23:01:00] - Refactored `read_context` MCP tool signature in `jinni/server.py` to use Pydantic `Field` for argument descriptions (`project_root`, `targets`, `rules`), moving details from docstring/description. Updated Memory Bank (`decisionLog.md`).
 *   [2025-04-05 23:09:00] - Renamed MCP tool `jinni_doc` to `usage` and CLI command `jinni doc` to `jinni usage`. Updated `jinni/server.py`, `jinni/core_logic.py`, `jinni/utils.py`, `jinni/cli.py`, `README.md`, and Memory Bank files (`decisionLog.md`, `productContext.md`).
+*   [2025-04-06 00:47:59] - Approved plan and updated `decisionLog.md` to reflect the decision to migrate project distribution from Node.js (`npm`/`npx`) to Python (`uv`/`uvx`/PyPI).
+*   [2025-04-06 01:03:00] - Added `jinni-server` script entry point to `pyproject.toml` based on user request, making the server directly executable via PATH alongside `uvx jinni-server`.
 ## Open Questions/Issues
 *   [2025-04-02 19:16:35] - Feature Request: Allow CLI to accept multiple directory/file paths as positional arguments, avoiding duplicate output.
 *   [2025-04-02 19:16:35] - Feature Request: Add new MCP tool `read_context_list` to handle multiple paths and avoid duplicates, similar to the CLI request.
-*   [2025-04-02 19:29:52] - Architectural Question: Should distribution/installation shift from Python/`pip` to Node.js/`npm`/`npx` as suggested by user? Requires discussion/decision.
+*   [2025-04-06 00:48:03] - Resolved: Decision made to use Python (`uv`/`uvx`/PyPI) for distribution, removing Node.js components.
 *

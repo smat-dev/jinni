@@ -173,6 +173,9 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+# Node.js
+node_modules/
+
 # Project specific
 dev-reference/
 jinni_debug.log

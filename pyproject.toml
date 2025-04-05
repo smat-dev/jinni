@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jinni"
+version = "0.1.0" # Initial version, can be updated
+description = "A tool to help LLMs efficiently read and understand project context."
+readme = "README.md"
+requires-python = ">=3.8" # Specify a reasonable minimum Python version
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "Your Name", email = "your.email@example.com" }, # Placeholder - User should update
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "pathspec",
+    "mcp",
+    "pyperclip",
+    "pydantic",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-username/jinni" # Placeholder - User should update
+Repository = "https://github.com/your-username/jinni" # Placeholder - User should update
+
+[project.scripts]
+jinni = "jinni.cli:main"
+jinni-server = "jinni.server:run_server" # Added script entry point
+
+# Entry point for running the server via uvx
+# Example: uvx jinni-server --log-level DEBUG
+[project.entry-points."uvx"]
+jinni-server = "jinni.server:run_server"
+
+# Optional: Configure hatchling if needed (e.g., include/exclude files)
+# [tool.hatch.build.targets.sdist]
+# include = ["/jinni", "/tests"] # Example

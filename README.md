@@ -49,7 +49,7 @@ This is customizable on a global and per-directory basis if desired.
 
 ### MCP Server (`read_context` tool)
 
-1.  **Setup:** Configure your MCP client (e.g., Claude Desktop's `claude_desktop_config.json`) to run the `jinni` server executable.
+1.  **Setup:** Configure your MCP client (e.g., Claude Desktop's `claude_desktop_config.json`) to run the `jinni` server via `uvx`.
 2.  **Invocation:** When interacting with your LLM via the MCP client, the model can invoke the `read_context` tool.
     *   **`project_root` (string, required):** The absolute path to the project root directory. Rule discovery and output paths are relative to this root.
     *   **`targets` (JSON array of strings, required):** Specifies a **mandatory** list of file(s)/director(y/ies) within `project_root` to process. Must be a JSON array of string paths (e.g., `["path/to/file1", "path/to/dir2"]`). Paths can be absolute or relative to CWD. All target paths must resolve to locations inside `project_root`. If an empty list `[]` is provided, the entire `project_root` is processed.
@@ -64,21 +64,46 @@ This is customizable on a global and per-directory basis if desired.
 *   **Invocation:** The model can invoke the `usage` tool (no arguments needed).
 *   **Output:** Returns the content of the `README.md` file as a string.
 
-*(Detailed server setup instructions will vary depending on your MCP client. Generally, you need to configure the client to execute the `jinni-server` command. For example, in Claude Desktop's `claude_desktop_config.json`):*
+*(Detailed server setup instructions will vary depending on your MCP client. Generally, you need to configure the client to execute the Jinni server.)*
 
-```json
-{
-  "mcpServers": {
-    "jinni": {
-      "command": "jinni-server"
-      // Note: You can optionally start the server to only read files from a specific directory tree (recommended for security/safety):
-      // "command": "jinni-server --root /absolute/path/"
+**Running the Server:**
+
+*   **Recommended Method:** Use `uvx` to run the server entry point directly (requires the `jinni` package to be published on PyPI or findable by `uvx`):
+    ```bash
+    uvx jinni-server [OPTIONS]
+    ```
+    Example MCP client configuration (e.g., `claude_desktop_config.json`):
+    ```json
+    {
+      "mcpServers": {
+        "jinni": {
+          "command": "uvx jinni-server"
+          // Optionally constrain the server root:
+          // "command": "uvx jinni-server --root /absolute/path/"
+        }
+      }
     }
-  }
-}
-```
+    ```
 
-*Consult your specific MCP client's documentation for precise setup steps. Ensure `jinni-server` (installed via `npm install -g jinni`) is accessible in your system's PATH. The `usage` tool corresponds to the `jinni usage` CLI command.*
+*   **During local development (after `uv pip install -e .`):** Use `python -m` to run the server module directly:
+    ```bash
+    python -m jinni.server [OPTIONS]
+    ```
+    Example MCP client configuration for local development:
+    ```json
+    {
+      "mcpServers": {
+        "jinni": {
+          // Adjust python path if needed, or ensure the correct environment is active
+          "command": "python -m jinni.server"
+          // Optionally constrain the server root:
+          // "command": "python -m jinni.server --root /absolute/path/to/repo"
+        }
+      }
+    }
+    ```
+
+*Consult your specific MCP client's documentation for precise setup steps. Ensure `uv` (for `uvx`) or the correct Python environment (for `python -m`) is accessible. The `usage` tool corresponds to the `jinni usage` CLI command.*
 
 ### Command-Line Utility (`jinni` CLI)
 
@@ -106,19 +131,19 @@ jinni usage
 
 ### Installation
 
-You can install Jinni globally using npm:
+You can install Jinni using `pip` or `uv`:
 
+**Using pip:**
 ```bash
-npm install -g jinni
+pip install jinni
 ```
 
-This will make the `jinni` CLI (including `jinni usage`) and `jinni-server` MCP server command available in your system PATH.
-
-Alternatively, you can run the CLI directly without global installation using `npx`:
-
+**Using uv:**
 ```bash
-npx jinni [OPTIONS] <PATH>
+uv pip install jinni
 ```
+
+This will make the `jinni` CLI command available in your environment. See the "Running the Server" section above for how to start the MCP server depending on your installation method.
 
 ### Examples
 

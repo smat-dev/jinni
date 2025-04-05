@@ -248,8 +248,11 @@ async def read_context(
             temp_handler.close()
 
 
-# --- Main Execution Block ---
-if __name__ == "__main__":
+# --- Server Execution Function ---
+def run_server():
+    """Parses arguments, configures logging, and runs the MCP server."""
+    global SERVER_ROOT_PATH # Allow modification of the global variable
+
     # --- Argument Parsing ---
     parser = argparse.ArgumentParser(description="Jinni MCP Server")
     parser.add_argument(
@@ -304,3 +307,7 @@ if __name__ == "__main__":
         logger.critical(f"!!! Exception during server.run(): {e}", exc_info=True)
         sys.exit(1)
     logger.info("Jinni MCP Server stopped.") # Use INFO for start/stop messages
+
+# --- Main Execution Block ---
+if __name__ == "__main__":
+    run_server()

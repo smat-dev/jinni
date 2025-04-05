@@ -37,6 +37,8 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-05 22:45:00] - Reverted MCP `read_context` tool: `targets` is mandatory but allows empty list (`[]`) to process project root. `rules` remains mandatory (allows `[]`).
 *   [2025-04-05 23:01:00] - Refactored `read_context` MCP tool signature in `jinni/server.py` to use Pydantic `Field` for argument descriptions (`project_root`, `targets`, `rules`).
 *   [2025-04-05 23:09:00] - Renamed MCP tool `jinni_doc` to `usage` and CLI command `jinni doc` to `jinni usage`.
+*   [2025-04-06 00:47:35] - Approved plan to migrate project distribution from Node.js (`npm`/`npx`) to Python (`uv`/`uvx`/PyPI).
+*   [2025-04-06 01:03:00] - Added `jinni-server` as a direct executable script in `pyproject.toml`.
 ## Rationale
 
 *   The plan provides a clear roadmap based on initial context gathering and user feedback, outlining core components and ordered tasks (Design/Docs -> Tests -> Implementation).
@@ -66,6 +68,8 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-05 22:45:00] - Reverting to allow empty `targets` list provides convenience for clients wanting to process the entire project root without needing to explicitly pass the root path as a target. Mandatory `rules` (allowing `[]`) maintains consistency.
 *   [2025-04-05 23:01:00] - Using `Field` annotations makes the generated MCP tool schema more descriptive and self-contained, improving usability for MCP clients and potentially enabling better automated UI generation or validation.
 *   [2025-04-05 23:09:00] - Renaming `jinni_doc` to `usage` provides a more intuitive name for the tool/command that displays the usage documentation (README).
+*   [2025-04-06 00:47:35] - Standardizes the project on Python tooling, simplifying the development setup and user installation process. Leverages the speed of `uv` for execution via `uvx`. Resolves the open architectural question regarding distribution method noted previously ([2025-04-02 19:29:52]).
+*   [2025-04-06 01:03:00] - User requested direct executable access to the server, similar to the `jinni` CLI, for convenience. Adding the script entry point achieves this alongside the `uvx` entry point.
 
 
 
@@ -105,3 +109,5 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-05 22:45:00] - Reverted `jinni/server.py`: Changed `read_context` validation logic to allow empty `targets` list (defaults to project root). Kept `rules` mandatory (allows `[]`). Updated tool description and docstrings. Updated `README.md` and `memory-bank/productContext.md`.
 *   [2025-04-05 23:01:00] - Modified `jinni/server.py`: Moved detailed descriptions for `project_root`, `targets`, and `rules` from the docstring and tool description into `Field(description=...)` annotations in the `read_context` function signature. Cleaned up the docstring and tool description accordingly.
 *   [2025-04-05 23:09:00] - Renamed function `jinni_doc` to `usage` in `jinni/server.py`. Renamed `get_jinni_doc` to `get_usage_doc` in `jinni/utils.py` and updated imports in `jinni/server.py` and `jinni/cli.py`. Renamed CLI command `--doc` to `--usage` and handler `handle_doc_command` to `handle_usage_command` in `jinni/cli.py`. Updated references in `README.md`.
+*   [2025-04-06 00:47:35] - Remove `package.json`, `bin/` directory. Add `node_modules/` to `.gitignore`. Create `pyproject.toml` with build backend, metadata, dependencies (from `requirements.txt`), and entry points (`jinni` script, `uvx jinni-server`). Update `README.md` installation/usage instructions. Update Memory Bank files (`decisionLog.md`, `activeContext.md`, `progress.md`).
+*   [2025-04-06 01:03:00] - Added `jinni-server = "jinni.server:run_server"` line under `[project.scripts]` in `pyproject.toml`.
