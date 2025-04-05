@@ -8,12 +8,15 @@ The philosophy behind this tool is that LLM context windows are large, models ar
 
 Jinni achieves this through two main components: an MCP (Model Context Protocol) server for integration with AI tools and a command-line utility (CLI) for manual use that copies project context to the clipboard ready to paste wherever you need it.
 
-The tools are opinionated about what counts as relevant project context to best work out of the box in most use cases, automatically excluding:
+These tools are opinionated about what counts as relevant project context to best work out of the box in most use cases, automatically excluding:
+
     * Binary files
-    * Dotfiles and hideen directories
+    * Dotfiles and hidden directories
     * Common naming conventions for logs, build directories, tempfiles, etc
 
-This is customizable on a global and per-directory basis if desired.
+Inclusions/exclusions are customizable with complete granularity if required using .contextfiles - this works like .gitignore except definining inclusions.
+
+The MCP server can provide as much or as little of the project as desired. By default the score is the whole project, but the model can ask for specific modules / matching patterns / etc.
 
 
 ## Components
@@ -85,24 +88,6 @@ This is customizable on a global and per-directory basis if desired.
     }
     ```
 
-*   **During local development (after `uv pip install -e .`):** Use `python -m` to run the server module directly:
-    ```bash
-    python -m jinni.server [OPTIONS]
-    ```
-    Example MCP client configuration for local development:
-    ```json
-    {
-      "mcpServers": {
-        "jinni": {
-          // Adjust python path if needed, or ensure the correct environment is active
-          "command": "python -m jinni.server"
-          // Optionally constrain the server root:
-          // "command": "python -m jinni.server --root /absolute/path/to/repo"
-        }
-      }
-    }
-    ```
-
 *Consult your specific MCP client's documentation for precise setup steps. Ensure `uv` (for `uvx`) or the correct Python environment (for `python -m`) is accessible. The `usage` tool corresponds to the `jinni usage` CLI command.*
 
 ### Command-Line Utility (`jinni` CLI)
@@ -120,14 +105,6 @@ jinni [OPTIONS] [<PATH...>]
 *   **`--debug-explain` (optional):** Print detailed inclusion/exclusion reasons to stderr and `jinni_debug.log`.
 *   **`--root <DIR>` / `-r <DIR>` (optional):** See above.
 *   **`--no-copy` (optional):** Prevent automatically copying the output content to the system clipboard when printing to standard output (the default is to copy).
-
-### Command-Line Utility (`jinni usage`)
-
-```bash
-jinni --usage
-```
-
-*   Displays the content of this README file to standard output.
 
 ### Installation
 
@@ -243,6 +220,24 @@ utils/*.sh
 ## Development
 
 *   **Design Details:** [DESIGN.md](DESIGN.md)
+
+*   **Running Server Locally:** During development (after installing with `uv pip install -e .` or similar), you can run the server module directly:
+    ```bash
+    python -m jinni.server [OPTIONS]
+    ```
+    Example MCP client configuration for local development:
+    ```json
+    {
+      "mcpServers": {
+        "jinni": {
+          // Adjust python path if needed, or ensure the correct environment is active
+          "command": "python -m jinni.server"
+          // Optionally constrain the server root:
+          // "command": "python -m jinni.server --root /absolute/path/to/repo"
+        }
+      }
+    }
+    ```
 
 ## Troubleshooting
 
