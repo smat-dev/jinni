@@ -95,7 +95,7 @@ This document details the internal design of the `jinni` MCP Server, `jinni` CLI
     *   **Description:** Generates a concatenated view of relevant code files from a specified directory, applying filtering rules from defaults, `.contextfiles`, and optional inline rules.
     *   **Input Schema:**
         *   `project_root` (string, required): The absolute path to the project root directory. Rule discovery and output paths are relative to this root.
-        *   `target` (string or JSON array of strings, optional): Specifies the file(s)/director(y/ies) within `project_root` to process. Can be a single string path (absolute or relative to CWD) or a JSON array of string paths (e.g., `["path/to/file1", "path/to/dir2"]`). If omitted, the entire `project_root` is processed. All target paths must resolve to locations inside `project_root`.
+        *   `targets` (JSON array of strings, optional): Specifies the file(s)/director(y/ies) within `project_root` to process. Must be a JSON array of string paths (e.g., `["path/to/file1", "path/to/dir2"]`). Paths can be absolute or relative to CWD. If omitted, the entire `project_root` is processed. All target paths must resolve to locations inside `project_root`.
         *   `rules` (JSON array of strings, optional): A list of inline filtering rules (using `.gitignore`-style syntax, e.g., `["src/**/*.py", "!*.tmp"]`). If provided, these rules are used exclusively, ignoring built-in defaults and `.contextfiles`.
         *   `list_only` (boolean, optional, default: false): Only list file paths.
         *   `size_limit_mb` (integer, optional): Override context size limit.

@@ -7,6 +7,7 @@ import io # Add io for StringIO
 import argparse
 from pathlib import Path
 from typing import List, Optional, Any, Union, Set # Added Set
+from pydantic import Field
 
 # Ensure jinni package is importable if running script directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -22,7 +23,7 @@ from mcp.server.fastmcp import FastMCP, Context
 
 # --- Core Logic Imports ---
 # Import from refactored modules
-from jinni.core_logic import read_context as core_read_context, get_jinni_doc # Main functions from new core_logic
+from jinni.core_logic import read_context as core_read_context, get_usage_doc # Main functions from new core_logic (get_jinni_doc renamed)
 from jinni.exceptions import ContextSizeExceededError, DetailedContextSizeError # Exceptions moved
 # Constants like DEFAULT_SIZE_LIMIT_MB might be needed if used directly, otherwise remove.
 # Let's assume they are handled within core_logic now.
@@ -34,56 +35,63 @@ server = FastMCP("jinni")
 SERVER_ROOT_PATH: Optional[Path] = None
 
 
-# --- jinni_doc Tool ---
-@server.tool(description="Retrieves the content of the project's README.md file.")
-async def jinni_doc() -> str:
-    """Returns documentation for advanced usage of Jinni"""
-    logger.info("--- jinni_doc tool invoked ---")
+# --- usage Tool ---
+@server.tool(description="Retrieves the Jinni usage documentation (content of README.md).")
+async def usage() -> str:
+    """Returns the Jinni usage documentation (content of README.md)."""
+    logger.info("--- usage tool invoked ---")
     try:
-        readme_content = get_jinni_doc() # Use directly imported function
+        readme_content = get_usage_doc() # Use renamed function
         # Prepend the requested message
-        return f"Jinni Doc (accessed via MCP Client):\n\n{readme_content}"
+        return f"Jinni Usage Documentation (accessed via MCP Client):\n\n{readme_content}"
     except Exception as e:
-        logger.exception(f"Unexpected error in jinni_doc tool: {e}")
+        logger.exception(f"Unexpected error in usage tool: {e}")
         # Let FastMCP handle the exception formatting
         raise e
 
 # --- Tool Definition (Corrected) ---
 @server.tool(description=(
     "Reads context from a specified project root directory (absolute path). "
-    "Optionally focuses on specific target files/directories within that root. "
+    "Focuses on the specified target files/directories within that root. "
     "Returns a concatenated string of files with metadata including paths relative to the project root. "
     "Assume the user wants to read in context for the whole project unless otherwise specified - "
     "do not ask the user for clarification if just asked to use the tool / read in context. "
-    "You can ignore the other arguments by default. "
     "If the user just says 'jinni', interpret that as read_context. "
-    "Both `target` and `rules` accept a JSON array of strings."
+    "Both `targets` and `rules` accept a JSON array of strings. "
+    "The `project_root`, `targets`, and `rules` arguments are mandatory. "
+    "You can ignore the other arguments by default. "
+    "IMPORTANT NOTE ON RULES: You MUST use the `usage` tool to read documentation on rules before using the rules "
+    "argument, or if you need to know how to set up persistent rules. "
 ))
+
+
+
+
 async def read_context(
-    project_root: str, # Mandatory project root path
-    target: Optional[Union[str, List[str]]] = None, # Optional target path(s) within project_root
-    rules: Optional[List[str]] = None,
+    project_root: str = Field(description="**MUST BE ABSOLUTE PATH**. The absolute path to the project root directory."),
+    targets: List[str] = Field(description="**Mandatory**. List of paths (absolute or relative to CWD) to specific files or directories within the project root to process. Must be a JSON array of strings. If empty (`[]`), the entire `project_root` is processed."),
+    rules: List[str] = Field(description="**Mandatory**. List of inline filtering rules. Provide `[]` if no specific rules are needed (uses defaults). You MUSTS Use the `usage` tool to read documentation on rules before using a non-empty list."),
     list_only: bool = False,
     size_limit_mb: Optional[int] = None,
     debug_explain: bool = False,
 ) -> str:
     logger.info("--- read_context tool invoked ---")
-    logger.debug(f"Received read_context request: project_root='{project_root}', target='{target}', list_only={list_only}, rules={rules}, debug_explain={debug_explain}")
+    logger.debug(f"Received read_context request: project_root='{project_root}', targets='{targets}', list_only={list_only}, rules={rules}, debug_explain={debug_explain}")
     """
     Generates a concatenated view of relevant code files for a given target path.
 
     The 'project_root' argument must always be an absolute path.
-    The optional 'target' argument, if provided, can be a single path (string) or a list of paths (JSON array of strings).
+    The optional 'targets' argument, if provided, must be a list of paths (JSON array of strings).
     Each path must be absolute or relative to the current working directory, and must resolve to a location
     *inside* the 'project_root'.
 
     If the server was started with a --root argument, the provided 'project_root' must be
     within that server root directory.
+    
     Args:
-        project_root: **MUST BE ABSOLUTE PATH**. The absolute path to the project root directory.
-        target: Optional path or list of paths (absolute or relative to CWD) to specific files or directories
-                within the project root to process. If omitted, the entire project root is processed.
-        rules: Optional list of inline filtering rules (using .contextfiles syntax). Defaults to None.
+        project_root: See Field description.
+        targets: See Field description.
+        rules: See Field description.
         list_only: Only list file paths found. Defaults to False.
         size_limit_mb: Override the maximum total context size in MB. Defaults to None (uses core_logic default).
         debug_explain: Print detailed explanation for file/directory inclusion/exclusion to server's stderr. Defaults to False.
@@ -98,32 +106,61 @@ async def read_context(
     resolved_project_root_path_str = str(resolved_project_root_path) # Store as string for core_logic
     logger.debug(f"Using project_root: {resolved_project_root_path_str}")
 
-    # Validate target(s) if provided
-    resolved_target_paths_str: List[str] = [] # Use a list to hold resolved paths
-    if target:
-        target_list = [target] if isinstance(target, str) else target
-        logger.debug(f"Processing target list: {target_list}")
-        for idx, single_target in enumerate(target_list):
-            if not isinstance(single_target, str):
-                 raise TypeError(f"Tool 'target' item at index {idx} must be a string, got {type(single_target)}")
+    # Validate mandatory targets list (can be empty)
+    if targets is None: # Should not happen if Pydantic enforces mandatory, but good practice
+        raise ValueError("Tool 'targets' argument is mandatory. Provide an empty list [] to process the entire project root.")
 
-            # Resolve target relative to CWD (Path default) before checking if it's inside project_root
-            resolved_target_path = Path(single_target).resolve()
+    resolved_target_paths_str: List[str] = []
+    effective_targets_set: Set[str] = set() # Use set to handle duplicates implicitly
+
+    # Process the provided targets list if it's not empty
+    if targets:
+        logger.debug(f"Processing provided targets list: {targets}")
+        for idx, single_target in enumerate(targets):
+            if not isinstance(single_target, str):
+                 raise TypeError(f"Tool 'targets' item at index {idx} must be a string, got {type(single_target)}")
+
+            # Check if target is absolute. If not, resolve relative to project_root.
+            target_path_obj = Path(single_target)
+            if target_path_obj.is_absolute():
+                resolved_target_path = target_path_obj.resolve()
+            else:
+                # Resolve relative path against the project root
+                resolved_target_path = (resolved_project_root_path / target_path_obj).resolve()
+                logger.debug(f"Resolved relative target '{single_target}' to '{resolved_target_path}' using project root '{resolved_project_root_path}'")
             if not resolved_target_path.exists():
-                 raise FileNotFoundError(f"Tool 'target' path '{single_target}' (resolved to {resolved_target_path}) does not exist.")
+                 raise FileNotFoundError(f"Tool 'targets' path '{single_target}' (resolved to {resolved_target_path}) does not exist.")
             # Check if target is within project_root AFTER resolving
             try:
                 resolved_target_path.relative_to(resolved_project_root_path)
             except ValueError:
-                 raise ValueError(f"Tool 'target' path '{resolved_target_path}' is outside the specified project root '{resolved_project_root_path}'")
+                 raise ValueError(f"Tool 'targets' path '{resolved_target_path}' is outside the specified project root '{resolved_project_root_path}'")
 
-            resolved_target_path_str = str(resolved_target_path)
-            resolved_target_paths_str.append(resolved_target_path_str)
-            logger.debug(f"Validated target path: {resolved_target_path_str}")
-    else:
-        logger.debug("No target provided. Processing entire project_root.")
-        # If no target, core_logic expects the project root itself as the target
+            resolved_path_str = str(resolved_target_path)
+            if resolved_path_str not in effective_targets_set:
+                 resolved_target_paths_str.append(resolved_path_str)
+                 effective_targets_set.add(resolved_path_str)
+                 logger.debug(f"Validated target path from targets[{idx}]: {resolved_path_str}")
+            else:
+                 logger.debug(f"Skipping duplicate target path from targets[{idx}]: {resolved_path_str}")
+
+    # If the initial targets list was empty OR it resulted in an empty list after validation,
+    # default to processing the project root.
+    if not resolved_target_paths_str:
+        logger.debug("Targets list is empty or resulted in no valid paths. Defaulting to project root.")
         resolved_target_paths_str = [resolved_project_root_path_str]
+
+    # Validate mandatory rules list (can be empty, but must be provided)
+    if rules is None: # Should not happen if Pydantic enforces mandatory, but good practice
+        raise ValueError("Tool 'rules' argument is mandatory. Provide an empty list [] if no specific rules are needed.")
+    if not isinstance(rules, list):
+        raise TypeError(f"Tool 'rules' argument must be a list, got {type(rules)}")
+    for idx, rule in enumerate(rules):
+        if not isinstance(rule, str):
+            raise TypeError(f"Tool 'rules' item at index {idx} must be a string, got {type(rule)}")
+    logger.debug(f"Using provided rules: {rules}")
+
+
     # --- Validate against Server Root (if set) ---
     # The *project_root* provided by the client must be within the server's root (if set)
     if SERVER_ROOT_PATH:
@@ -135,8 +172,10 @@ async def read_context(
              raise ValueError(f"Tool project_root '{resolved_project_root_path}' is outside the allowed server root '{SERVER_ROOT_PATH}'")
 
     logger.info(f"Processing project_root: {resolved_project_root_path_str}")
-    if target: # Log only if user actually provided targets
-        logger.info(f"Focusing on target(s): {resolved_target_paths_str}")
+    # Log the final list of targets being processed
+    # Log the final list of targets being processed
+    # Log the final list of targets being processed
+    logger.info(f"Focusing on target(s): {resolved_target_paths_str}")
     # --- Call Core Logic ---
     log_capture_buffer = None
     temp_handler = None
@@ -181,7 +220,7 @@ async def read_context(
             debug_explain=debug_explain # Pass flag down
             # include_size_in_list is False by default in core_logic if not passed
         )
-        logger.debug(f"Finished processing project_root: {resolved_project_root_path_str}, target(s): {resolved_target_paths_str}. Result length: {len(result_content)}")
+        logger.debug(f"Finished processing project_root: {resolved_project_root_path_str}, targets(s): {resolved_target_paths_str}. Result length: {len(result_content)}")
 
         if debug_explain and log_capture_buffer:
             debug_output = log_capture_buffer.getvalue()
@@ -194,11 +233,11 @@ async def read_context(
 
     except (FileNotFoundError, ContextSizeExceededError, ValueError, DetailedContextSizeError) as e:
         # Let FastMCP handle converting these known errors
-        logger.error(f"Error during read_context call for project_root='{resolved_project_root_path_str}', target(s)='{resolved_target_paths_str}': {type(e).__name__} - {e}")
+        logger.error(f"Error during read_context call for project_root='{resolved_project_root_path_str}', targets(s)='{resolved_target_paths_str}': {type(e).__name__} - {e}")
         raise e # Re-raise for FastMCP
     except Exception as e:
         # Log unexpected errors before FastMCP potentially converts to a generic 500
-        logger.exception(f"Unexpected error processing project_root='{resolved_project_root_path_str}', target(s)='{resolved_target_paths_str}': {type(e).__name__} - {e}")
+        logger.exception(f"Unexpected error processing project_root='{resolved_project_root_path_str}', targets(s)='{resolved_target_paths_str}': {type(e).__name__} - {e}")
         raise e
     finally:
         # --- Cleanup: Remove temporary handler ---

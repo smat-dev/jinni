@@ -1,4 +1,4 @@
-!# Decision Log
+# Decision Log
 
 This file records architectural and implementation decisions using a list format.
 2025-04-02 18:07:44 - Log of updates made.
@@ -30,7 +30,13 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-05 12:20:00] - Changed override rule behavior: Override rules (CLI `--overrides` or MCP `rules`) now completely replace built-in default rules, instead of being combined with them.
 *   [2025-04-05 12:42:00] - Confirmed rule override behavior: CLI `--overrides` or MCP `rules` cause these rules (combined with built-in defaults) to be used exclusively, ignoring any rules defined in `.contextfiles`.
 *   [2025-04-05 12:42:00] - Enhanced `read_context` MCP tool: The `target` parameter now accepts either a single string path or a JSON array of string paths (e.g., `["path/to/file1", "path/to/dir2"]`).
-
+*   [2025-04-05 13:44:26] - Added optional `target` (string) parameter to `read_context` MCP tool as a convenience for specifying a single target. The server now processes the union of `target` and `targets`.
+*   [2025-04-05 15:50:22] - Removed optional `target` parameter from `read_context` MCP tool. Made `targets` (list of strings) parameter mandatory. (Superseded)
+*   [2025-04-05 15:58:51] - Corrected relative path resolution for `targets` in `read_context` MCP tool.
+*   [2025-04-05 18:07:00] - Reverted `targets` parameter to be optional (`Optional[List[str]] = None`) for `read_context` MCP tool. If `targets` is None or an empty list, it defaults to processing the entire `project_root`. (Final Decision)
+*   [2025-04-05 22:45:00] - Reverted MCP `read_context` tool: `targets` is mandatory but allows empty list (`[]`) to process project root. `rules` remains mandatory (allows `[]`).
+*   [2025-04-05 23:01:00] - Refactored `read_context` MCP tool signature in `jinni/server.py` to use Pydantic `Field` for argument descriptions (`project_root`, `targets`, `rules`).
+*   [2025-04-05 23:09:00] - Renamed MCP tool `jinni_doc` to `usage` and CLI command `jinni doc` to `jinni usage`.
 ## Rationale
 
 *   The plan provides a clear roadmap based on initial context gathering and user feedback, outlining core components and ordered tasks (Design/Docs -> Tests -> Implementation).
@@ -53,6 +59,13 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-05 12:20:00] - Combining default rules with overrides led to unexpected precedence behavior (e.g., `!*` not overriding the initial default `*`). Making overrides replace defaults entirely aligns with standard `.gitignore` behavior and user expectations for overrides.
 *   [2025-04-05 12:42:00] - The previous override behavior (combining overrides with defaults) led to unexpected precedence issues. Making overrides exclusive (replacing defaults and ignoring `.contextfiles`) aligns with standard `.gitignore` behavior and user expectations for explicit overrides.
 *   [2025-04-05 12:42:00] - Allowing the MCP `target` parameter to accept an array of paths provides greater flexibility for programmatically targeting multiple specific files or directories within a project root, mirroring a capability already present in the CLI.
+*   [2025-04-05 13:44:26] - Adding a singular `target` parameter provides a more convenient way for MCP clients to specify a single file or directory without needing to construct a single-element list for the `targets` parameter. Combining `target` and `targets` ensures flexibility.
+*   [2025-04-05 15:50:22] - Requiring a mandatory `targets` list simplifies the tool's interface and removes ambiguity between `target` and `targets`. It aligns better with the CLI's multi-path capability and enforces explicit target specification. (Rationale Superseded)
+*   [2025-04-05 15:58:51] - Relative paths in the `targets` argument were being resolved against the server's CWD instead of the provided `project_root`. The fix ensures relative paths are correctly joined with `project_root` before validation.
+*   [2025-04-05 18:07:00] - Making `targets` optional again and defaulting to the project root provides a more convenient default behavior for clients that want to process the entire project without explicitly providing the root path as a target. (Final Rationale)
+*   [2025-04-05 22:45:00] - Reverting to allow empty `targets` list provides convenience for clients wanting to process the entire project root without needing to explicitly pass the root path as a target. Mandatory `rules` (allowing `[]`) maintains consistency.
+*   [2025-04-05 23:01:00] - Using `Field` annotations makes the generated MCP tool schema more descriptive and self-contained, improving usability for MCP clients and potentially enabling better automated UI generation or validation.
+*   [2025-04-05 23:09:00] - Renaming `jinni_doc` to `usage` provides a more intuitive name for the tool/command that displays the usage documentation (README).
 
 
 
@@ -83,3 +96,12 @@ This file records architectural and implementation decisions using a list format
 *   [2025-04-05 12:20:00] - Modified `jinni/core_logic.py`: Changed line `all_override_rules = DEFAULT_RULES + override_rules` to `override_spec = compile_spec_from_rules(override_rules, "Overrides")` within the `if use_overrides:` block. Updated `README.md` and `DESIGN.md`.
 *   [2025-04-05 12:42:00] - Updated documentation (`README.md`, `DESIGN.md`, `memory-bank/productContext.md`) to reflect the exclusive nature of override rules. Core logic change was previously implemented in `jinni/context_walker.py`.
 *   [2025-04-05 12:42:00] - Updated `jinni/server.py` tool schema and description for the `read_context` tool's `target` parameter. Updated documentation (`README.md`, `DESIGN.md`, `memory-bank/productContext.md`) to reflect this change.
+*   [2025-04-05 13:03:18] - Changed `read_context` MCP tool `target` parameter type from `Optional[Union[str, List[str]]]` to `Optional[List[str]]`. Rationale: Simplifies interface, removes ambiguity. Implementation: Updated `jinni/server.py` signature/docstring/logic, `tests/test_integration_mcp.py`, `README.md`, `DESIGN.md`, `memory-bank/productContext.md`.
+*   [2025-04-05 13:05:41] - Renamed `read_context` MCP tool parameter `target` to `targets`. Rationale: Better reflects that the parameter accepts a list of paths. Implementation: Updated `jinni/server.py`, `tests/test_integration_mcp.py`, `README.md`, `DESIGN.md`, `memory-bank/productContext.md`.
+*   [2025-04-05 13:44:26] - Added `target: Optional[str] = None` parameter to `read_context` tool signature in `jinni/server.py`. Updated validation logic to create a set from both `target` (if provided) and `targets` (if provided), then convert to a list for `core_read_context`. Updated tool description and argument documentation in `jinni/server.py` and `README.md`.
+*   [2025-04-05 15:50:22] - Removed `target` parameter from `read_context` tool signature in `jinni/server.py`. Changed `targets: Optional[List[str]] = None` to `targets: List[str]`. Updated validation logic to require `targets` list and process it directly. Updated tool description and argument documentation in `jinni/server.py` and `README.md`. (Superseded)
+*   [2025-04-05 15:58:51] - Modified the target validation loop in `jinni/server.py`'s `read_context` tool handler. Added a check `Path(single_target).is_absolute()`. If false, the path is joined with `resolved_project_root_path` before calling `.resolve()`.
+*   [2025-04-05 18:07:00] - Changed `targets: List[str]` back to `targets: Optional[List[str]] = None` in `jinni/server.py`. Updated validation logic to check if `targets` is provided and not empty; otherwise, set `resolved_target_paths_str` to `[resolved_project_root_path_str]`. Updated documentation and tests. (Final Implementation)
+*   [2025-04-05 22:45:00] - Reverted `jinni/server.py`: Changed `read_context` validation logic to allow empty `targets` list (defaults to project root). Kept `rules` mandatory (allows `[]`). Updated tool description and docstrings. Updated `README.md` and `memory-bank/productContext.md`.
+*   [2025-04-05 23:01:00] - Modified `jinni/server.py`: Moved detailed descriptions for `project_root`, `targets`, and `rules` from the docstring and tool description into `Field(description=...)` annotations in the `read_context` function signature. Cleaned up the docstring and tool description accordingly.
+*   [2025-04-05 23:09:00] - Renamed function `jinni_doc` to `usage` in `jinni/server.py`. Renamed `get_jinni_doc` to `get_usage_doc` in `jinni/utils.py` and updated imports in `jinni/server.py` and `jinni/cli.py`. Renamed CLI command `--doc` to `--usage` and handler `handle_doc_command` to `handle_usage_command` in `jinni/cli.py`. Updated references in `README.md`.

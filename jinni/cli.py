@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import logging
 import logging.handlers
 # Import from refactored modules
-from jinni.core_logic import read_context, get_jinni_doc as core_get_jinni_doc, DEFAULT_SIZE_LIMIT_MB, ENV_VAR_SIZE_LIMIT # Re-add ENV_VAR_SIZE_LIMIT
+from jinni.core_logic import read_context, get_usage_doc as core_get_usage_doc, DEFAULT_SIZE_LIMIT_MB, ENV_VAR_SIZE_LIMIT # Re-add ENV_VAR_SIZE_LIMIT
 from jinni.exceptions import ContextSizeExceededError, DetailedContextSizeError # Exceptions moved
 # ENV_VAR_SIZE_LIMIT is likely handled internally now
 import pyperclip # Added for clipboard functionality
@@ -22,11 +22,11 @@ DEBUG_LOG_FILENAME = "jinni_debug.log"
 
 # --- Command Handlers ---
 
-def handle_doc_command(args):
-    """Handles displaying the documentation."""
-    logger.debug("Executing doc display.")
+def handle_usage_command(args):
+    """Handles displaying the usage documentation."""
+    logger.debug("Executing usage display.")
     try:
-        doc_content = core_get_jinni_doc()
+        doc_content = core_get_usage_doc()
         print(doc_content)
     except Exception as e:
         print(f"Error retrieving documentation: {e}", file=sys.stderr)
@@ -180,7 +180,7 @@ Examples:
   jinni -l .                          # List files in current directory
   jinni -o ctx.txt ./src              # Write src context to file
   jinni -r /abs/path/root ./project   # Use specific root for output paths
-  jinni --doc                         # Display documentation
+  jinni --usage                       # Display usage documentation
 """
     )
 
@@ -240,18 +240,18 @@ Examples:
         help="Do not automatically copy the output content to the clipboard when printing to stdout."
     )
     parser.add_argument(
-        "--doc",
+        "--usage",
         action="store_true",
-        help="Display the Jinni README.md documentation and exit."
+        help="Display the Jinni usage documentation (README.md) and exit."
     )
 
     # --- Parse Arguments ---
     args = parser.parse_args()
 
     # --- Execute based on args ---
-    if args.doc:
-        # If --doc is used, ignore other arguments and show docs
-        handle_doc_command(args)
+    if args.usage:
+        # If --usage is used, ignore other arguments and show usage
+        handle_usage_command(args)
     else:
         # Otherwise, proceed with reading context
         handle_read_command(args)

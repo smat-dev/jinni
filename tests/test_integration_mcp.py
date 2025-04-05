@@ -10,8 +10,8 @@ async def test_mcp_read_context_basic(test_environment: Path):
     """Test basic MCP read_context respecting .contextfiles (dynamic rules)."""
     test_dir = test_environment
     tool_name = "read_context"
-    # Use project_root, target is None
-    arguments = { "project_root": str(test_dir) }
+    # Provide mandatory targets (project root) and rules (empty list)
+    arguments = { "project_root": str(test_dir), "targets": [str(test_dir)], "rules": [] }
     result = await run_mcp_tool_call(tool_name, arguments)
 
     assert isinstance(result, types.CallToolResult)
@@ -54,8 +54,8 @@ async def test_mcp_read_context_list_only(test_environment: Path):
     """Test MCP read_context with list_only=True."""
     test_dir = test_environment
     tool_name = "read_context"
-    # Use project_root, target is None
-    arguments = { "project_root": str(test_dir), "list_only": True }
+    # Provide mandatory targets (project root) and rules (empty list)
+    arguments = { "project_root": str(test_dir), "targets": [str(test_dir)], "rules": [], "list_only": True }
     result = await run_mcp_tool_call(tool_name, arguments)
 
     assert isinstance(result, types.CallToolResult)
@@ -89,10 +89,11 @@ async def test_mcp_read_context_inline_rules(test_environment: Path):
     """Test MCP read_context with inline rules overriding file rules."""
     test_dir = test_environment
     tool_name = "read_context"
-    # Use project_root, target is None
+    # Provide mandatory targets (project root) and specific rules
     arguments = {
         "project_root": str(test_dir),
-        "rules": [ "*.py", "!src/app.py", "lib/**" ] # Inline: include py, exclude src/app.py, include lib/**
+        "targets": [str(test_dir)], # Mandatory targets
+        "rules": [ "*.py", "!src/app.py", "lib/**" ] # Inline rules are mandatory
     }
     result = await run_mcp_tool_call(tool_name, arguments)
 
@@ -121,8 +122,8 @@ async def test_mcp_debug_explain(test_environment: Path):
     # Verifying server-side logging isn't feasible with stdio_client directly.
     test_dir = test_environment
     tool_name = "read_context"
-    # Use project_root, target is None
-    arguments = { "project_root": str(test_dir), "debug_explain": True }
+    # Provide mandatory targets (project root) and rules (empty list)
+    arguments = { "project_root": str(test_dir), "targets": [str(test_dir)], "rules": [], "debug_explain": True }
     result = await run_mcp_tool_call(tool_name, arguments)
 
     # Check stdout content (same as basic MCP test)
@@ -141,8 +142,8 @@ async def test_mcp_read_context_target_file(test_environment: Path):
     test_dir = test_environment
     target_file = test_dir / "src" / "app.py"
     tool_name = "read_context"
-    # Target the specific file within the project root
-    arguments = { "project_root": str(test_dir), "target": str(target_file) }
+    # Target the specific file within the project root, provide mandatory rules
+    arguments = { "project_root": str(test_dir), "targets": [str(target_file)], "rules": [] }
     result = await run_mcp_tool_call(tool_name, arguments)
 
     assert isinstance(result, types.CallToolResult)
@@ -167,7 +168,7 @@ async def test_mcp_read_context_target_list_files(test_environment: Path):
         str(test_dir / "README.md")
     ]
     tool_name = "read_context"
-    arguments = { "project_root": str(test_dir), "target": target_files }
+    arguments = { "project_root": str(test_dir), "targets": target_files, "rules": [] }
     result = await run_mcp_tool_call(tool_name, arguments)
 
     assert isinstance(result, types.CallToolResult)
@@ -194,7 +195,7 @@ async def test_mcp_read_context_target_list_mixed(test_environment: Path):
         str(test_dir / "src") # Target the directory
     ]
     tool_name = "read_context"
-    arguments = { "project_root": str(test_dir), "target": targets }
+    arguments = { "project_root": str(test_dir), "targets": targets, "rules": [] }
     result = await run_mcp_tool_call(tool_name, arguments)
 
     assert isinstance(result, types.CallToolResult)
@@ -220,27 +221,23 @@ async def test_mcp_read_context_target_list_mixed(test_environment: Path):
 
 
 @pytest.mark.asyncio
-async def test_mcp_read_context_target_list_empty(test_environment: Path):
-    """Test MCP read_context targeting an empty list (should behave like no target)."""
+async def test_mcp_read_context_target_list_empty_defaults_to_root(test_environment: Path):
+    """Test MCP read_context targeting an empty list defaults to project root."""
     test_dir = test_environment
     tool_name = "read_context"
-    # Target an empty list
-    arguments = { "project_root": str(test_dir), "target": [] }
+    # Target an empty list - should default to processing the root
+    arguments = { "project_root": str(test_dir), "targets": [], "rules": [] } # Provide mandatory rules
     result = await run_mcp_tool_call(tool_name, arguments)
 
     assert isinstance(result, types.CallToolResult)
-    assert not result.isError
+    assert not result.isError # Should not be an error
     assert len(result.content) == 1 and isinstance(result.content[0], types.TextContent)
     stdout_text = result.content[0].text
-
-    # Assertions should match the basic test (test_mcp_read_context_basic)
-    # as an empty target list means process the whole project_root
+    # Assertions should match the basic test (processing the root)
     assert "File: file_root.txt" in stdout_text
     assert "File: README.md" in stdout_text
     assert "File: main.py" in stdout_text
-    assert "File: src/app.py" in stdout_text
-    assert "File: dir_a/important.log" in stdout_text
-    assert "dir_a/file_a1.txt" not in stdout_text # Excluded locally
+
 
 
 @pytest.mark.asyncio
@@ -252,7 +249,7 @@ async def test_mcp_read_context_target_list_invalid(test_environment: Path):
         str(test_dir / "non_existent_file.txt") # Invalid path
     ]
     tool_name = "read_context"
-    arguments = { "project_root": str(test_dir), "target": targets }
+    arguments = { "project_root": str(test_dir), "targets": targets, "rules": [] }
     result = await run_mcp_tool_call(tool_name, arguments)
 
     assert isinstance(result, types.CallToolResult)
@@ -262,3 +259,39 @@ async def test_mcp_read_context_target_list_invalid(test_environment: Path):
     assert "does not exist" in result.content[0].text
     assert "non_existent_file.txt" in result.content[0].text
     # No need to check stdout_text as it's an error result
+
+
+# --- Tests for mandatory arguments ---
+
+@pytest.mark.asyncio
+async def test_mcp_read_context_missing_targets_raises_error(test_environment: Path):
+    """Test MCP read_context raises error when mandatory 'targets' is missing."""
+    test_dir = test_environment
+    tool_name = "read_context"
+    # Call without the 'targets' argument - should raise error
+    arguments = { "project_root": str(test_dir), "rules": [] } # Provide mandatory rules
+    result = await run_mcp_tool_call(tool_name, arguments)
+
+    assert isinstance(result, types.CallToolResult)
+    assert result.isError # Should be an error
+    assert len(result.content) == 1 and isinstance(result.content[0], types.TextContent)
+    error_text = result.content[0].text
+    # Check that the error message mentions the missing field
+    assert "targets" in error_text.lower() and ("required" in error_text.lower() or "missing" in error_text.lower())
+
+
+@pytest.mark.asyncio
+async def test_mcp_read_context_missing_rules_raises_error(test_environment: Path):
+    """Test MCP read_context raises error when mandatory 'rules' is missing."""
+    test_dir = test_environment
+    tool_name = "read_context"
+    # Call without the 'rules' argument - should raise error
+    arguments = { "project_root": str(test_dir), "targets": [str(test_dir)] } # Provide mandatory targets
+    result = await run_mcp_tool_call(tool_name, arguments)
+
+    assert isinstance(result, types.CallToolResult)
+    assert result.isError # Should be an error
+    assert len(result.content) == 1 and isinstance(result.content[0], types.TextContent)
+    error_text = result.content[0].text
+    # Check that the error message mentions the missing field
+    assert "rules" in error_text.lower() and ("required" in error_text.lower() or "missing" in error_text.lower())

@@ -28,7 +28,7 @@ from .exceptions import (
 )
 from .utils import (
     get_large_files,
-    get_jinni_doc,
+    get_usage_doc, # Renamed from get_jinni_doc
     _find_context_files_for_dir, # Needed by context_walker, but keep import here for now? No, walker imports it.
 )
 from .file_processor import process_file
@@ -166,7 +166,8 @@ def read_context(
     logger.debug(f"Effective size limit: {effective_limit_mb}MB ({size_limit_bytes} bytes)")
 
     # --- Override Handling ---
-    use_overrides = override_rules is not None
+    # Override rules are used only if the list is provided AND non-empty
+    use_overrides = bool(override_rules) # bool([]) is False, bool(['rule']) is True
     override_spec: Optional['pathspec.PathSpec'] = None
     if use_overrides:
         if pathspec is None:

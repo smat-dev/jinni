@@ -26,8 +26,8 @@ This is customizable on a global and per-directory basis if desired.
     *   A command-line tool for manually generating the project context dump.
     *   Useful feeding context to LLMs via copy-paste or file input. Or pipe the output wherever you need it.
 
-3.  **`jinni doc` / `jinni_doc` Tool:**
-    *   A simple command (`jinni doc` via CLI) or MCP tool (`jinni_doc`) that displays the content of this README file. Useful for quick reference within the terminal or via an MCP client.
+3.  **`jinni usage` / `usage` Tool:**
+    *   A simple command (`jinni usage` via CLI) or MCP tool (`usage`) that displays the content of this README file. Useful for quick reference within the terminal or via an MCP client.
 
 ## Features
 
@@ -52,16 +52,16 @@ This is customizable on a global and per-directory basis if desired.
 1.  **Setup:** Configure your MCP client (e.g., Claude Desktop's `claude_desktop_config.json`) to run the `jinni` server executable.
 2.  **Invocation:** When interacting with your LLM via the MCP client, the model can invoke the `read_context` tool.
     *   **`project_root` (string, required):** The absolute path to the project root directory. Rule discovery and output paths are relative to this root.
-    *   **`target` (string or JSON array of strings, optional):** Specifies the file(s)/director(y/ies) within `project_root` to process. Can be a single string path (absolute or relative to CWD) or a JSON array of string paths (e.g., `["path/to/file1", "path/to/dir2"]`). If omitted, the entire `project_root` is processed. All target paths must resolve to locations inside `project_root`.
-    *   **`rules` (JSON array of strings, optional):** A list of inline filtering rules (using `.gitignore`-style syntax, e.g., `["src/**/*.py", "!*.tmp"]`). If provided, these rules are used exclusively, ignoring built-in defaults and `.contextfiles`.
+    *   **`targets` (JSON array of strings, required):** Specifies a **mandatory** list of file(s)/director(y/ies) within `project_root` to process. Must be a JSON array of string paths (e.g., `["path/to/file1", "path/to/dir2"]`). Paths can be absolute or relative to CWD. All target paths must resolve to locations inside `project_root`. If an empty list `[]` is provided, the entire `project_root` is processed.
+    *   **`rules` (JSON array of strings, required):** A **mandatory** list of inline filtering rules (using `.gitignore`-style syntax, e.g., `["src/**/*.py", "!*.tmp"]`). Provide an empty list `[]` if no specific rules are needed (this will use built-in defaults). If non-empty, these rules are used exclusively, ignoring built-in defaults and `.contextfiles`.
     *   **`list_only` (boolean, optional):** If true, returns only the list of relative file paths instead of content.
     *   **`size_limit_mb` (integer, optional):** Override the context size limit in MB.
     *   **`debug_explain` (boolean, optional):** Enable debug logging on the server.
     3.  **Output:** The tool returns a single string containing the concatenated content (with headers) or the file list. Paths in headers/lists are relative to the provided `project_root`. In case of a context size error, it returns a `DetailedContextSizeError` with details about the largest files.
 
-### MCP Server (`jinni_doc` tool)
+### MCP Server (`usage` tool)
 
-*   **Invocation:** The model can invoke the `jinni_doc` tool (no arguments needed).
+*   **Invocation:** The model can invoke the `usage` tool (no arguments needed).
 *   **Output:** Returns the content of the `README.md` file as a string.
 
 *(Detailed server setup instructions will vary depending on your MCP client. Generally, you need to configure the client to execute the `jinni-server` command. For example, in Claude Desktop's `claude_desktop_config.json`):*
@@ -78,7 +78,7 @@ This is customizable on a global and per-directory basis if desired.
 }
 ```
 
-*Consult your specific MCP client's documentation for precise setup steps. Ensure `jinni-server` (installed via `npm install -g jinni`) is accessible in your system's PATH.*
+*Consult your specific MCP client's documentation for precise setup steps. Ensure `jinni-server` (installed via `npm install -g jinni`) is accessible in your system's PATH. The `usage` tool corresponds to the `jinni usage` CLI command.*
 
 ### Command-Line Utility (`jinni` CLI)
 
@@ -96,10 +96,10 @@ jinni [OPTIONS] [<PATH...>]
 *   **`--root <DIR>` / `-r <DIR>` (optional):** See above.
 *   **`--no-copy` (optional):** Prevent automatically copying the output content to the system clipboard when printing to standard output (the default is to copy).
 
-### Command-Line Utility (`jinni doc`)
+### Command-Line Utility (`jinni usage`)
 
 ```bash
-jinni doc
+jinni usage
 ```
 
 *   Displays the content of this README file to standard output.
@@ -112,7 +112,7 @@ You can install Jinni globally using npm:
 npm install -g jinni
 ```
 
-This will make the `jinni` CLI (including `jinni doc`) and `jinni-server` MCP server command available in your system PATH.
+This will make the `jinni` CLI (including `jinni usage`) and `jinni-server` MCP server command available in your system PATH.
 
 Alternatively, you can run the CLI directly without global installation using `npx`:
 
@@ -179,7 +179,7 @@ Jinni uses `.contextfiles` (or an override file) to determine which files and di
         *   Compiles these combined rules into a temporary specification (`PathSpec`).
         *   Matches the current file/directory path (relative to the common root) against this specification.
     3.  **Matching:** The **last pattern** in the combined rule set that matches the item determines its fate. If the last matching pattern starts with `!`, the item is excluded. Otherwise, it's included. If no user-defined pattern in the combined rule set matches the item, it is included *unless* it matches one of the built-in default exclusion patterns (e.g., `.git/`, `node_modules/`, common binary extensions). If no pattern matches at all (neither user nor default), the item is included.
-    4.  **Target Handling:** If a specific `target` is provided (CLI or MCP), it is validated to be within the `project_root`. If it's a file, only that file is processed (rule checks don't apply to the target file itself, but binary/size checks do). If it's a directory, the walk starts there, but rules are still applied relative to the `project_root`.
+    4.  **Target Handling:** If specific `targets` are provided (CLI or MCP), they are validated to be within the `project_root`. If a target is a file, only that file is processed (rule checks don't apply to the target file itself, but binary/size checks do). If a target is a directory, the walk starts there, but rules are still applied relative to the `project_root`.
 
 ### Examples (`.contextfiles`)
 
@@ -239,4 +239,4 @@ If you encounter an error indicating the context size limit was exceeded, Jinni 
         ```
     *   Refer to the **Configuration** section above for detailed syntax and usage.
 3.  **Increase the Limit (Use with Caution):** If all included files are genuinely necessary, you can increase the size limit using `--size-limit-mb` (CLI) or `size_limit_mb` (MCP). Be mindful of LLM context window limits and processing costs.
-4.  **Use `jinni doc` / `jinni_doc`:** If you need to refer back to these instructions or the configuration details while troubleshooting, use the `jinni doc` command or the `jinni_doc` MCP tool.
+4.  **Use `jinni usage` / `usage`:** If you need to refer back to these instructions or the configuration details while troubleshooting, use the `jinni usage` command or the `usage` MCP tool.
