@@ -38,6 +38,12 @@ Repository = "https://github.com/your-username/jinni" # Placeholder - User shoul
 jinni = "jinni.cli:main"
 jinni-server = "jinni.server:run_server" # Added script entry point
 
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
+
 # Entry point for running the server via uvx
 # Example: uvx jinni-server --log-level DEBUG
 [project.entry-points."uvx"]
