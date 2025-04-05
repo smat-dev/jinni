@@ -18,6 +18,19 @@ Inclusions/exclusions are customizable with complete granularity if required usi
 
 The MCP server can provide as much or as little of the project as desired. By default the score is the whole project, but the model can ask for specific modules / matching patterns / etc.
 
+# Quickstart for MCP
+
+```json
+{
+    "mcpServers": {
+    "jinni": {
+        "command": "uvx jinni-server"
+        // Optionally constrain the server to only read within a tree (recommended for security):
+        // "command": "uvx jinni-server --root /absolute/path/"
+    }
+    }
+}
+```
 
 ## Components
 
