@@ -48,6 +48,52 @@ APPLICATION_TEXT_MIMES = {
     'application/sql', 'application/graphql', 'application/ld+json', 'application/csv',
 }
 
+# --- Constants for Shared Usage Documentation ---
+ESSENTIAL_USAGE_DOC = """
+**Jinni Context Filtering Rules & .contextfiles**
+
+**1. Filtering Rules:**
+
+*   **Purpose:** Control which files and directories are included or excluded when reading context.
+*   **Inline Rules (via `read_context` tool):**
+    *   Pass a JSON array of strings to the `rules` argument.
+    *   Rules are processed in order.
+    *   Format: `[+/-][type:]pattern`
+        *   `+` (Include) / `-` (Exclude) - Default is `+` if omitted.
+        *   `type:` (Optional) `d:` for directory, `f:` for file. If omitted, applies to both.
+        *   `pattern:` Glob pattern (e.g., `*.py`, `__pycache__/`, `tests`).
+    *   Example: `["-*.log", "-d:node_modules", "+f:*.py", "+d:src"]` (Exclude logs and node_modules, include Python files and the src directory).
+*   **Default Rules:** If `rules` is empty (`[]`), Jinni uses built-in defaults (e.g., excludes `.git`, `__pycache__`).
+
+**2. Persistent Rules (`.contextfiles`):**
+
+*   **Purpose:** Define project-specific rules that are automatically applied.
+*   **Location:** Place a file named `.contextfiles` in the *project root* directory (the one passed as `project_root` to `read_context`).
+*   **Format:** Same as inline rules, one rule per line. Blank lines and lines starting with `#` are ignored.
+*   **Priority:** Rules from `.contextfiles` are applied *before* any inline rules provided via the `rules` argument.
+*   **Example `.contextfiles`:**
+    ```
+    # Exclude build artifacts
+    -d:build/
+    -d:dist/
+
+    # Always include config files
+    +*.yaml
+    +*.json
+
+    # Exclude specific test data
+    -tests/data/large_files/
+    ```
+
+**Combining Rules:**
+
+1.  Default rules are applied first.
+2.  Rules from `.contextfiles` (if found in the project root) are applied next, potentially overriding defaults.
+3.  Inline rules from the `rules` argument are applied last, potentially overriding `.contextfiles` and defaults.
+
+Use `debug_explain=True` in `read_context` to see how rules are applied to specific files/directories.
+"""
+
 # --- Helper Functions (Moved from core_logic.py) ---
 
 def get_file_info(file_path: Path) -> Dict[str, Any]:
@@ -150,35 +196,8 @@ def _is_binary(file_path: Path) -> bool:
          return False # Default to False (text) on unexpected error
 
 
-def get_usage_doc() -> str:
-    """
-    Reads and returns the content of the project's README.md file in a portable way,
-    suitable for distribution via npm where file layout is predictable relative to scripts.
-    Assumes README.md is located one level above the directory containing this script.
-    """
-    try:
-        # Get the directory containing this script (utils.py)
-        script_dir = Path(__file__).resolve().parent
-        # Assume README.md is in the parent directory of the script's directory
-        readme_path = script_dir.parent / 'README.md'
-        logger.debug(f"Attempting to read README from script-relative path: {readme_path}")
-
-        if readme_path.is_file():
-            return readme_path.read_text(encoding='utf-8')
-        else:
-            logger.error(f"README.md not found at expected script-relative location: {readme_path}")
-            # Try one level higher just in case structure is different (e.g., src layout)
-            readme_path_alt = script_dir.parent.parent / 'README.md'
-            logger.debug(f"Attempting alternative script-relative path: {readme_path_alt}")
-            if readme_path_alt.is_file():
-                 return readme_path_alt.read_text(encoding='utf-8')
-            else:
-                 logger.error(f"README.md also not found at alternative script-relative location: {readme_path_alt}")
-                 return f"Error: README.md not found at expected script-relative locations ({readme_path} or {readme_path_alt}). Ensure it's copied correctly during npm packaging."
-
-    except Exception as e:
-         logger.exception(f"Error accessing README.md via script-relative path: {e}")
-         return f"Error accessing package documentation (README.md): {e}"
+# get_usage_doc function removed as it's no longer used.
+# The CLI and Server now use hardcoded essential usage info.
 
 
 def get_large_files(root_dir_str: str = ".", top_n: int = 10) -> List[Tuple[str, int]]:

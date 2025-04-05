@@ -11,8 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import logging
 import logging.handlers
 # Import from refactored modules
-from jinni.core_logic import read_context, get_usage_doc as core_get_usage_doc, DEFAULT_SIZE_LIMIT_MB, ENV_VAR_SIZE_LIMIT # Re-add ENV_VAR_SIZE_LIMIT
+from jinni.core_logic import read_context, DEFAULT_SIZE_LIMIT_MB, ENV_VAR_SIZE_LIMIT # Re-add ENV_VAR_SIZE_LIMIT
 from jinni.exceptions import ContextSizeExceededError, DetailedContextSizeError # Exceptions moved
+from jinni.utils import ESSENTIAL_USAGE_DOC # Import the shared usage doc constant
 # ENV_VAR_SIZE_LIMIT is likely handled internally now
 import pyperclip # Added for clipboard functionality
 
@@ -23,14 +24,10 @@ DEBUG_LOG_FILENAME = "jinni_debug.log"
 # --- Command Handlers ---
 
 def handle_usage_command(args):
-    """Handles displaying the usage documentation."""
-    logger.debug("Executing usage display.")
-    try:
-        doc_content = core_get_usage_doc()
-        print(doc_content)
-    except Exception as e:
-        print(f"Error retrieving documentation: {e}", file=sys.stderr)
-        sys.exit(1)
+    """Handles displaying the essential usage documentation."""
+    logger.debug("Executing essential usage display.")
+    # Use the imported constant from utils.py
+    print(ESSENTIAL_USAGE_DOC)
 
 def handle_read_command(args):
     """Handles the context reading logic."""

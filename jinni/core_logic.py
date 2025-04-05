@@ -28,7 +28,7 @@ from .exceptions import (
 )
 from .utils import (
     get_large_files,
-    get_usage_doc, # Renamed from get_jinni_doc
+    # get_usage_doc removed as it's no longer used
     _find_context_files_for_dir, # Needed by context_walker, but keep import here for now? No, walker imports it.
 )
 from .file_processor import process_file

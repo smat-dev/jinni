@@ -23,8 +23,9 @@ from mcp.server.fastmcp import FastMCP, Context
 
 # --- Core Logic Imports ---
 # Import from refactored modules
-from jinni.core_logic import read_context as core_read_context, get_usage_doc # Main functions from new core_logic (get_jinni_doc renamed)
+from jinni.core_logic import read_context as core_read_context # Main functions from new core_logic
 from jinni.exceptions import ContextSizeExceededError, DetailedContextSizeError # Exceptions moved
+from jinni.utils import ESSENTIAL_USAGE_DOC # Import the shared usage doc constant
 # Constants like DEFAULT_SIZE_LIMIT_MB might be needed if used directly, otherwise remove.
 # Let's assume they are handled within core_logic now.
 
@@ -39,53 +40,9 @@ SERVER_ROOT_PATH: Optional[Path] = None
 @server.tool(description="Retrieves the Jinni usage documentation (content of README.md).")
 async def usage() -> str:
     """Returns essential Jinni usage documentation focusing on rules and .contextfiles."""
-    logger.info("--- usage tool invoked (returning hardcoded essential info) ---")
-    # Hardcoded essential usage info
-    essential_usage = """
-**Jinni Context Filtering Rules & .contextfiles**
-
-**1. Filtering Rules:**
-
-*   **Purpose:** Control which files and directories are included or excluded when reading context.
-*   **Inline Rules (via `read_context` tool):**
-    *   Pass a JSON array of strings to the `rules` argument.
-    *   Rules are processed in order.
-    *   Format: `[+/-][type:]pattern`
-        *   `+` (Include) / `-` (Exclude) - Default is `+` if omitted.
-        *   `type:` (Optional) `d:` for directory, `f:` for file. If omitted, applies to both.
-        *   `pattern:` Glob pattern (e.g., `*.py`, `__pycache__/`, `tests`).
-    *   Example: `["-*.log", "-d:node_modules", "+f:*.py", "+d:src"]` (Exclude logs and node_modules, include Python files and the src directory).
-*   **Default Rules:** If `rules` is empty (`[]`), Jinni uses built-in defaults (e.g., excludes `.git`, `__pycache__`).
-
-**2. Persistent Rules (`.contextfiles`):**
-
-*   **Purpose:** Define project-specific rules that are automatically applied.
-*   **Location:** Place a file named `.contextfiles` in the *project root* directory (the one passed as `project_root` to `read_context`).
-*   **Format:** Same as inline rules, one rule per line. Blank lines and lines starting with `#` are ignored.
-*   **Priority:** Rules from `.contextfiles` are applied *before* any inline rules provided via the `rules` argument.
-*   **Example `.contextfiles`:**
-    ```
-    # Exclude build artifacts
-    -d:build/
-    -d:dist/
-
-    # Always include config files
-    +*.yaml
-    +*.json
-
-    # Exclude specific test data
-    -tests/data/large_files/
-    ```
-
-**Combining Rules:**
-
-1.  Default rules are applied first.
-2.  Rules from `.contextfiles` (if found in the project root) are applied next, potentially overriding defaults.
-3.  Inline rules from the `rules` argument are applied last, potentially overriding `.contextfiles` and defaults.
-
-Use `debug_explain=True` in `read_context` to see how rules are applied to specific files/directories.
-"""
-    return essential_usage
+    logger.info("--- usage tool invoked (returning shared essential info) ---")
+    # Use the imported constant from utils.py
+    return ESSENTIAL_USAGE_DOC
 
 # --- Tool Definition (Corrected) ---
 @server.tool(description=(
