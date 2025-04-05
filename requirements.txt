@@ -1,5 +1,4 @@
 pathspec
 mcp
-puremagic
 pyperclip
 pydantic

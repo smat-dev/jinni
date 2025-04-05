@@ -94,7 +94,7 @@ def read_context(
             raise ValueError(f"Provided project root '{project_root_str}' does not exist or is not a directory.")
         output_rel_root = project_root_path
         rule_discovery_root = project_root_path
-        logger.debug(f"Using provided project root for output/rule discovery: {output_rel_root}")
+        logger.debug(f"Using provided project root for output relativity and rule discovery boundary: {output_rel_root}")
     # else: Roots will be determined after resolving targets
 
     # Resolve target paths (relative to CWD by default)
@@ -112,7 +112,7 @@ def read_context(
               logger.debug("No specific targets or project root provided; processing current directory '.'")
 
     for p_str in target_paths_str:
-        p = Path(p_str).resolve()
+        p = Path(p_str).resolve() # Resolve paths here to ensure they are absolute
         if not p.exists():
             raise FileNotFoundError(f"Target path does not exist: {p_str} (resolved to {p})")
         target_paths.append(p)
@@ -131,7 +131,7 @@ def read_context(
             calculated_root = Path.cwd().resolve()
         output_rel_root = calculated_root
         rule_discovery_root = calculated_root
-        logger.debug(f"Using common ancestor/CWD as output/rule discovery root: {output_rel_root}")
+        logger.debug(f"Using common ancestor/CWD as output relativity and rule discovery boundary root: {output_rel_root}")
     # else: Roots were already set from the valid project_root_path
 
     # Ensure roots are set (safeguard)
@@ -246,7 +246,8 @@ def read_context(
     except ContextSizeExceededError as e:
             # Catch error, format with large files list, and raise Detailed error
             logger.error(f"Context size limit exceeded: {e}")
-            large_files = get_large_files(str(rule_discovery_root))
+            # Use output_rel_root as the base for finding large files
+            large_files = get_large_files(str(output_rel_root))
             error_message = (
                 f"Error: Context size limit of {e.limit_mb}MB exceeded.\n"
                 f"Processing stopped near file: {e.file_path}\n\n"

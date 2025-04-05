@@ -19,7 +19,7 @@ This document details the internal design of the `jinni` MCP Server, `jinni` CLI
            *   If overrides are active (CLI `--overrides` or MCP `rules`): Uses a pre-compiled `PathSpec` based exclusively on the provided override rules (built-in defaults and `.contextfiles` are ignored).
            *   If no overrides: Finds relevant `.contextfiles` from `rule_discovery_root` down to the current directory, loads rules, combines with defaults, and compiles a `PathSpec` specific to that directory's context.
        *   Applies the active `PathSpec` to filter files and prune subdirectories.
-       *   **Explicit Target Inclusion:** Any file or directory path explicitly provided as a target in the initial list is *always* included/traversed, regardless of matching rules.
+       *   **Explicit Target Inclusion:** Explicitly provided file targets are always processed (subject to binary/size checks), bypassing rule checks. Explicitly provided directory targets ensure traversal starts within them, but files/subdirectories found during the walk are still subject to rule checks relative to the rule discovery root.
        *   Handles `list_only` flag.
 *   **File Reading:**
     *   Attempts multiple encodings (UTF-8, Latin-1, CP1252).
@@ -83,7 +83,7 @@ This document details the internal design of the `jinni` MCP Server, `jinni` CLI
     3.  **Filtering Decision:**
         *   The active `PathSpec` for the current directory is used to match files and subdirectories (relative to the `rule_discovery_root`).
         *   Standard `pathspec` matching applies (last matching pattern wins, `!` negates). If no user-defined pattern matches, the item is included unless it matches a built-in default exclusion. If no pattern matches at all, it's included.
-    4.  **Explicit Target Inclusion:** Files/directories explicitly listed as input targets are *always* included/traversed, bypassing the `PathSpec` check for those specific items.
+    4.  **Explicit Target Inclusion:** Explicitly provided file targets bypass rule checks (but not binary/size checks). Explicitly provided directory targets ensure traversal starts there, with rules still applying to items found within during the walk relative to the rule discovery root.
     5.  **Directory Pruning:** During `os.walk` (`topdown=True`), subdirectories are checked against the active `PathSpec`. If a subdirectory doesn't match (is excluded) and wasn't an explicit target, it's removed from `dirnames` to prevent traversal.
 
 ## 4. `jinni` MCP Server Design
@@ -95,8 +95,8 @@ This document details the internal design of the `jinni` MCP Server, `jinni` CLI
     *   **Description:** Generates a concatenated view of relevant code files from a specified directory, applying filtering rules from defaults, `.contextfiles`, and optional inline rules.
     *   **Input Schema:**
         *   `project_root` (string, required): The absolute path to the project root directory. Rule discovery and output paths are relative to this root.
-        *   `targets` (JSON array of strings, optional): Specifies the file(s)/director(y/ies) within `project_root` to process. Must be a JSON array of string paths (e.g., `["path/to/file1", "path/to/dir2"]`). Paths can be absolute or relative to CWD. If omitted, the entire `project_root` is processed. All target paths must resolve to locations inside `project_root`.
-        *   `rules` (JSON array of strings, optional): A list of inline filtering rules (using `.gitignore`-style syntax, e.g., `["src/**/*.py", "!*.tmp"]`). If provided, these rules are used exclusively, ignoring built-in defaults and `.contextfiles`.
+        *   `targets` (JSON array of strings, **required**): Specifies the file(s)/director(y/ies) within `project_root` to process. Must be a JSON array of string paths (e.g., `["path/to/file1", "path/to/dir2"]`). Paths can be absolute or relative to CWD. If an empty list `[]` is provided, the entire `project_root` is processed. All target paths must resolve to locations inside `project_root`.
+        *   `rules` (JSON array of strings, **required**): A list of inline filtering rules (using `.gitignore`-style syntax, e.g., `["src/**/*.py", "!*.tmp"]`). Provide an empty list `[]` if no specific rules are needed (uses built-in defaults). If non-empty, these rules are used exclusively, ignoring built-in defaults and `.contextfiles`.
         *   `list_only` (boolean, optional, default: false): Only list file paths.
         *   `size_limit_mb` (integer, optional): Override context size limit.
         *   `debug_explain` (boolean, optional, default: false): Enable debug logging on server stderr.
@@ -109,12 +109,12 @@ This document details the internal design of the `jinni` MCP Server, `jinni` CLI
 *   **Command:** `jinni`
 *   **Arguments:**
     *   `paths` (optional, positional, zero or more): Target directory or file paths to process. Defaults to `['.']` if none provided.
+    *   `--root <DIR>` / `-r <DIR>` (optional): Specify the project root directory. Rule discovery starts here, and output paths are relative to this directory. If omitted, the root is inferred from the common ancestor of the `paths` arguments.
     *   `--output <file>` / `-o <file>` (optional): Write output to a file instead of stdout.
     *   `--list-only` / `-l` (optional): Only list file paths found.
     *   `--overrides <file>` (optional): Specify an overrides file. If provided, rules from this file are used exclusively, ignoring built-in defaults and all `.contextfiles`.
     *   `--size-limit-mb <int>` / `-s <int>` (optional): Override context size limit.
     *   `--debug-explain` (optional): Enable detailed debug logging to stderr and `jinni_debug.log`.
-    *   `--output-relative-to <dir>` (optional): Make output file paths relative to this directory.
     *   `--no-copy` (optional): Prevent automatically copying output content to the clipboard when printing to stdout (default is to copy).
 *   **Output:** Prints concatenated content or file list to stdout or specified output file.
 *   **Error Handling:** Prints user-friendly error messages to stderr.
