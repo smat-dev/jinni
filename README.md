@@ -27,7 +27,7 @@ This is customizable on a global and per-directory basis if desired.
     *   Useful feeding context to LLMs via copy-paste or file input. Or pipe the output wherever you need it.
 
 3.  **`jinni usage` / `usage` Tool:**
-    *   A simple command (`jinni usage` via CLI) or MCP tool (`usage`) that displays the content of this README file. Useful for quick reference within the terminal or via an MCP client.
+    *   A simple command (`jinni --usage` via CLI) or MCP tool (`usage`) that displays the content of this README file. Useful for quick reference within the terminal or via an MCP client.
 
 ## Features
 
@@ -124,7 +124,7 @@ jinni [OPTIONS] [<PATH...>]
 ### Command-Line Utility (`jinni usage`)
 
 ```bash
-jinni usage
+jinni --usage
 ```
 
 *   Displays the content of this README file to standard output.

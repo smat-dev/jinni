@@ -44,10 +44,6 @@ dev = [
     "pytest-asyncio",
 ]
 
-# Entry point for running the server via uvx
-# Example: uvx jinni-server --log-level DEBUG
-[project.entry-points."uvx"]
-jinni-server = "jinni.server:run_server"
 
 # Optional: Configure hatchling if needed (e.g., include/exclude files)
 # [tool.hatch.build.targets.sdist]

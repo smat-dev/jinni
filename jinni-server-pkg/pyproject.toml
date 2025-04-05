@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jinni-server"
+version = "0.1.0" # Match the main jinni package version
+description = "Server component for Jinni (enables 'uvx jinni-server')."
+readme = "README.md" # Optional: Create a simple README for this package
+requires-python = ">=3.10" # Match the main jinni package requirement
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "Solomon Matthews", email = "dev@sdmatthews.com" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+]
+# This package depends on the main 'jinni' package
+dependencies = [
+    "jinni>=0.1.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/smat-dev/jinni" # Link to main repo
+Repository = "https://github.com/smat-dev/jinni" # Link to main repo
+
+# This script points to the server code within the 'jinni' dependency
+[project.scripts]
+jinni-server = "jinni.server:run_server"
+
+[tool.hatch.build.targets.wheel]
+# Explicitly include the package directory containing __init__.py
+packages = ["jinni_server_pkg"]
+
+# Optional: Add a minimal README.md in this directory
+# Optional: Add a dummy source file like jinni_server_pkg/__init__.py if needed by build tools
