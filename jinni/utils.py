@@ -111,7 +111,7 @@ utils/*.sh
 **Guidance for AI Model Usage**
 
 When requesting context using the `read_context` tool:
-*   **Default Behavior:** If you provide an empty `rules` list (`[]`), Jinni uses sensible default exclusions (like `.git`, `node_modules`, `__pycache__`, common binary types) combined with any project-specific `.contextfiles`. This usually provides the "canonical context" - files developers typically track in version control.
+*   **Default Behavior:** If you provide an empty `rules` list (`[]`), Jinni uses sensible default exclusions (like `.git`, `node_modules`, `__pycache__`, common binary types) combined with any project-specific `.contextfiles`. This usually provides the "canonical context" - files developers typically track in version control. Assume this is what the user wants if they just ask to read context.
 *   **Targeting Specific Files:** If you need specific files (e.g., `["src/main.py", "README.md"]`), provide them in the `targets` list. This is efficient and precise.
 *   **Using `rules` (Overrides):** If you provide specific `rules`, remember they *replace* the defaults. You gain full control but lose the default exclusions. For example, if you use `rules: ["*.py"]`, you might get Python files from `.venv/` unless you also add `"!*.venv/"`.
 *   **Unsure What to Exclude?** If you're crafting `rules` and unsure what to exclude, consider inspecting the project's `.gitignore` file (if available) for patterns commonly ignored by developers. You might adapt these patterns for your `rules` list (remembering `!` means exclude in Jinni rules).

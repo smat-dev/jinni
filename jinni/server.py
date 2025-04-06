@@ -56,14 +56,12 @@ async def usage() -> str:
     "Both `targets` and `rules` accept a JSON array of strings. "
     "The `project_root`, `targets`, and `rules` arguments are mandatory. "
     "You can ignore the other arguments by default. "
-    "IMPORTANT NOTE ON RULES: You MUST use the `usage` tool to read documentation on rules before using the rules "
-    "argument, or if you need to know how to set up persistent rules.\n\n"
+    "IMPORTANT NOTE ON RULES: Ensure you understand the rule syntax (details available via the `usage` tool) before providing specific rules. "
+    "Using `rules=[]` is recommended if unsure, as this uses sensible defaults.\n\n"
     "**Guidance for AI Model Usage**\n\n"
     "When requesting context using this tool:\n"
-    "*   **Default Behavior:** If you provide an empty `rules` list (`[]`), Jinni uses sensible default exclusions (like `.git`, `node_modules`, `__pycache__`, common binary types) combined with any project-specific `.contextfiles`. This usually provides the \"canonical context\" - files developers typically track in version control.\n"
+    "*   **Default Behavior:** If you provide an empty `rules` list (`[]`), Jinni uses sensible default exclusions (like `.git`, `node_modules`, `__pycache__`, common binary types) combined with any project-specific `.contextfiles`. This usually provides the \"canonical context\" - files developers typically track in version control. Assume this is what the users wants if they just ask to read context.\n"
     "*   **Targeting Specific Files:** If you have a list of specific files you need (e.g., `[\"src/main.py\", \"README.md\"]`), provide them in the `targets` list. This is efficient and precise, quicker than reading one by one.\n"
-    "*   **Using `rules` (Overrides):** If you provide specific `rules`, remember they *replace* the defaults. You gain full control but lose the default exclusions. For example, if you use `rules: [\"*.py\"]`, you might get Python files from `.venv/` unless you also add `\"!*.venv/\"`.\n"
-    "*   **Unsure What to Exclude?** If you're crafting `rules` and unsure what to exclude, consider inspecting the project's `.gitignore` file (if available) for patterns commonly ignored by developers. You might adapt these patterns for your `rules` list (remembering `!` means exclude in Jinni rules). You can use list_only to see what would be included if unsure.\n"
 ))
 
 
@@ -72,7 +70,7 @@ async def usage() -> str:
 async def read_context(
     project_root: str = Field(description="**MUST BE ABSOLUTE PATH**. The absolute path to the project root directory."),
     targets: List[str] = Field(description="**Mandatory**. List of paths (absolute or relative to CWD) to specific files or directories within the project root to process. Must be a JSON array of strings. If empty (`[]`), the entire `project_root` is processed."),
-    rules: List[str] = Field(description="**Mandatory**. List of inline filtering rules. Provide `[]` if no specific rules are needed (uses defaults). You MUSTS Use the `usage` tool to read documentation on rules before using a non-empty list."),
+    rules: List[str] = Field(description="**Mandatory**. List of inline filtering rules. Provide `[]` if no specific rules are needed (uses defaults). It is strongly recommended to consult the `usage` tool documentation before providing a non-empty list."),
     list_only: bool = False,
     size_limit_mb: Optional[int] = None,
     debug_explain: bool = False,

@@ -18,7 +18,7 @@ Inclusions/exclusions are customizable with complete granularity if required usi
 
 The MCP server can provide as much or as little of the project as desired. By default the score is the whole project, but the model can ask for specific modules / matching patterns / etc.
 
-# Quickstart for MCP
+# MCP Quickstart
 
 MCP server config for Cursor / Roo / Claude Desktop / client of choice:
 
@@ -34,13 +34,19 @@ MCP server config for Cursor / Roo / Claude Desktop / client of choice:
 }
 ```
 
-You an now ask the agent to read in context.
+Install uv if it is not on your system: https://docs.astral.sh/uv/getting-started/installation/
+
+Reload your IDE and you can now ask the agent to read in context.
 
 If you want to restrict this to particular modules / paths just ask - e.g. "Read context for tests".
 
 In action with Cursor:
 
 <img src="assets/use_example.png" alt="Usage Example">
+
+# Note For Cursor Users
+
+Cursor can silently drop context that is larger than the allowed maximum, so if you have a sizable project and the agent acts like the tool call never happened try reducing what you are bringing in (e.g: "read context for the xyz component")
 
 ## Components
 
