@@ -34,33 +34,13 @@ memory_bank_strategy:
   if_memory_bank_exists: |
       1. **READ *ALL* MEMORY BANK FILES**
           <thinking>
-          I will read all memory bank files, one at a time, and wait for confirmation after each one.
+          I need to read all Markdown files from the memory-bank directory using the jinni MCP server's read_context tool. I will infer the project_root, target the 'memory-bank/' directory specifically, and use default rules by providing an empty rules list.
           </thinking>
-        a. **MANDATORY:** Read `productContext.md`:
-            <read_file>
-            <path>memory-bank/productContext.md</path>
-            </read_file>
-          - WAIT for confirmation.
-        b. **MANDATORY:** Read `activeContext.md`:
-            <read_file>
-            <path>memory-bank/activeContext.md</path>
-            </read_file>
-          - WAIT for confirmation.
-        c. **MANDATORY:** Read `systemPatterns.md`:
-            <read_file>
-            <path>memory-bank/systemPatterns.md</path>
-            </read_file>
-          - WAIT for confirmation.
-        d. **MANDATORY:** Read `decisionLog.md`:
-            <read_file>
-            <path>memory-bank/decisionLog.md</path>
-            </read_file>
-          - WAIT for confirmation.
-        e. **MANDATORY:** Read `progress.md`:
-            <read_file>
-            <path>memory-bank/progress.md</path>
-            </read_file>
-          - WAIT for confirmation.
+          - Use the `jinni` MCP server's `read_context` tool.
+          - Set the `targets` argument to `["memory-bank/"]`.
+          - Set the `rules` argument to `["*.md"]` to only include markdown files within the target directory.
+          - Ensure the `project_root` argument is correctly inferred (it should be the absolute path to the current project).
+          - WAIT for confirmation after the tool use.
       2. Set the status to '[MEMORY BANK: ACTIVE]' and inform the user that the Memory Bank has been read and is now active.
       3. Proceed with the task using the context from the Memory Bank or if no task is provided, suggest some tasks to the user.
   general:

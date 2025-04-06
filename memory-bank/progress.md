@@ -14,21 +14,10 @@ This file tracks the project's progress using a task list format.
 *   [2025-04-04 15:58:00] - Task 10: Implement Multi-Path CLI Input - Completed as part of Task 17 (changing `paths` nargs to `'*'`).
 *   [2025-04-04 22:35:54] - Task 18: Implement `jinni doc` / `jinni_doc` and Context Size Error Handling - Added `jinni doc` CLI command and `jinni_doc` MCP tool. Implemented `DetailedContextSizeError` in `core_logic.py` to report the 10 largest files when the size limit is exceeded. Updated CLI, server, and documentation (`README.md`, Memory Bank).
 *   [2025-04-05 12:55:00] - Task 19: Refactor `read_context` Arguments (Mandatory `project_root`, Optional `target`) - Changed `read_context` signature in `core_logic.py`, made `-r`/`--root` required in `cli.py`, updated MCP tool schema in `server.py`. Updated `README.md` and Memory Bank files.
+*   [2025-04-06 00:48:19] - Task 20: Migrate Distribution from npm/npx to uv/PyPI - Removed Node.js artifacts, established Python packaging with `pyproject.toml`, updated documentation (`README.md`) for `uv`/`pip`/`uvx` installation and usage. Includes adding `jinni-server` script entry point.
+*   [2025-04-04 13:05:00] - Task 15: Re-architect Config System & Core Logic (Dynamic Traversal) - Marked complete during final UMB [2025-04-06 15:54:00].
+*   [2025-04-02 19:52:56] - Task 9: Implement Debug Explain Option (`--debug-explain`) - Marked complete/superseded during final UMB [2025-04-06 15:54:00].
+*   Task 6: Final review and update of all documentation (`README.md`, `DESIGN.md`) - Marked complete during final UMB [2025-04-06 15:54:00].
+## Pending Tasks - *None*
 
-## Current Major Task
-
-*   [2025-04-06 00:48:19] - **Task 20: Migrate Distribution from npm/npx to uv/PyPI**
-    *   **Goal:** Remove Node.js artifacts, establish Python packaging with `pyproject.toml`, update documentation (`README.md`) for `uv`/`pip`/`uvx` installation and usage.
-    *   **Includes:** Modifying `.gitignore`, creating `pyproject.toml`, updating `README.md`, updating Memory Bank.
-        *   [2025-04-06 01:03:00] - Added `jinni-server` to `[project.scripts]` in `pyproject.toml` for direct execution.
-
-## Pending Tasks (Post-Refactor / Migration)
-
-*   [2025-04-04 13:05:00] - **Task 15: Re-architect Config System & Core Logic (Dynamic Traversal)** - *Review/Finalize after migration.*
-    *   **Goal:** Implement dynamic `PathSpec` compilation during traversal (`core_logic.py`), handle `.contextfiles` hierarchy, implement overrides, ensure explicit target inclusion.
-    *   **Includes:** Updating CLI (`--overrides`), server, unit tests (Task 2), integration tests (Task 7), and documentation (Task 6) to align with the new architecture.
-    *   *(Note: Tasks 3, 4, 5, 11, 12, 13, 14 are effectively superseded or incorporated into this task).*
-
-*   [2025-04-02 19:52:56] - Task 9: Implement Debug Explain Option (`--debug-explain`).
-*   Task 6: Final review and update of all documentation (`README.md`, `DESIGN.md`).
-*   [2025-04-06 00:48:19] - Task TBD: Address distribution/installation method (Python/pip vs Node.js/npm) - **Resolved:** Decision made to use Python (`uv`/PyPI). See Task 20.
+*   [2025-04-06 15:54:00] - UMB: Finalizing project status per user instruction. All tasks complete.
