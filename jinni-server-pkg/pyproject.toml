@@ -25,7 +25,7 @@ classifiers = [
 ]
 # This package depends on the main 'jinni' package
 dependencies = [
-    "jinni>=0.1.0"
+    "jinni>=0.1.5" # Match the main package version exactly
 ]
 
 [project.urls]

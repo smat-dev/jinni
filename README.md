@@ -14,9 +14,9 @@ These tools are opinionated about what counts as relevant project context to bes
     * Dotfiles and hidden directories
     * Common naming conventions for logs, build directories, tempfiles, etc
 
-Inclusions/exclusions are customizable with complete granularity if required using .contextfiles - this works like .gitignore except definining inclusions.
+Inclusions/exclusions are customizable with complete granularity if required using .contextfiles - this works like .gitignore except defining inclusions.
 
-The MCP server can provide as much or as little of the project as desired. By default the score is the whole project, but the model can ask for specific modules / matching patterns / etc.
+The MCP server can provide as much or as little of the project as desired. By default the scope is the whole project, but the model can ask for specific modules / matching patterns / etc.
 
 # MCP Quickstart
 
@@ -46,7 +46,7 @@ In action with Cursor:
 
 # Note For Cursor Users
 
-Cursor can silently drop context that is larger than the allowed maximum, so if you have a sizable project and the agent acts like the tool call never happened try reducing what you are bringing in (e.g: "read context for the xyz component")
+Cursor can silently drop context that is larger than the allowed maximum, so if you have a sizable project and the agent acts like the tool call never happened, try reducing what you are bringing in ("read context for xyz")
 
 ## Components
 
@@ -56,7 +56,7 @@ Cursor can silently drop context that is larger than the allowed maximum, so if 
 
 2.  **`jinni` CLI:**
     *   A command-line tool for manually generating the project context dump.
-    *   Useful feeding context to LLMs via copy-paste or file input. Or pipe the output wherever you need it.
+    *   Useful for feeding context to LLMs via copy-paste or file input. Or pipe the output wherever you need it.
 
 ## Features
 
@@ -81,7 +81,7 @@ Cursor can silently drop context that is larger than the allowed maximum, so if 
 1.  **Setup:** Configure your MCP client (e.g., Claude Desktop's `claude_desktop_config.json`) to run the `jinni` server via `uvx`.
 2.  **Invocation:** When interacting with your LLM via the MCP client, the model can invoke the `read_context` tool.
     *   **`project_root` (string, required):** The absolute path to the project root directory. Rule discovery and output paths are relative to this root.
-    *   **`targets` (JSON array of strings, required):** Specifies a **mandatory** list of file(s)/director(y/ies) within `project_root` to process. Must be a JSON array of string paths (e.g., `["path/to/file1", "path/to/dir2"]`). Paths can be absolute or relative to CWD. All target paths must resolve to locations inside `project_root`. If an empty list `[]` is provided, the entire `project_root` is processed.
+    *   **`targets` (JSON array of strings, required):** Specifies a **mandatory** list of file(s)/directory/ies within `project_root` to process. Must be a JSON array of string paths (e.g., `["path/to/file1", "path/to/dir2"]`). Paths can be absolute or relative to CWD. All target paths must resolve to locations inside `project_root`. If an empty list `[]` is provided, the entire `project_root` is processed.
     *   **`rules` (JSON array of strings, required):** A **mandatory** list of inline filtering rules (using `.gitignore`-style syntax, e.g., `["src/**/*.py", "!*.tmp"]`). Provide an empty list `[]` if no specific rules are needed (this will use built-in defaults). If non-empty, these rules are used exclusively, ignoring built-in defaults and `.contextfiles`.
     *   **`list_only` (boolean, optional):** If true, returns only the list of relative file paths instead of content.
     *   **`size_limit_mb` (integer, optional):** Override the context size limit in MB.

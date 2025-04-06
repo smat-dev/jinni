@@ -50,7 +50,7 @@ async def usage() -> str:
     "Focuses on the specified target files/directories within that root. "
     "Returns a concatenated string of files with metadata including paths relative to the project root. "
     "Assume the user wants to read in context for the whole project unless otherwise specified - "
-    "do not ask the user for clarification if just asked to use the tool / read in context. "
+    "do not ask the user for clarification if just asked to read context. "
     "If the user just says 'jinni', interpret that as read_context. "
     "If the user asks to list context, use the list_only argument. "
     "Both `targets` and `rules` accept a JSON array of strings. "
