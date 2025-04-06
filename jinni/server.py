@@ -52,11 +52,18 @@ async def usage() -> str:
     "Assume the user wants to read in context for the whole project unless otherwise specified - "
     "do not ask the user for clarification if just asked to use the tool / read in context. "
     "If the user just says 'jinni', interpret that as read_context. "
+    "If the user asks to list context, use the list_only argument. "
     "Both `targets` and `rules` accept a JSON array of strings. "
     "The `project_root`, `targets`, and `rules` arguments are mandatory. "
     "You can ignore the other arguments by default. "
     "IMPORTANT NOTE ON RULES: You MUST use the `usage` tool to read documentation on rules before using the rules "
-    "argument, or if you need to know how to set up persistent rules. "
+    "argument, or if you need to know how to set up persistent rules.\n\n"
+    "**Guidance for AI Model Usage**\n\n"
+    "When requesting context using this tool:\n"
+    "*   **Default Behavior:** If you provide an empty `rules` list (`[]`), Jinni uses sensible default exclusions (like `.git`, `node_modules`, `__pycache__`, common binary types) combined with any project-specific `.contextfiles`. This usually provides the \"canonical context\" - files developers typically track in version control.\n"
+    "*   **Targeting Specific Files:** If you have a list of specific files you need (e.g., `[\"src/main.py\", \"README.md\"]`), provide them in the `targets` list. This is efficient and precise, quicker than reading one by one.\n"
+    "*   **Using `rules` (Overrides):** If you provide specific `rules`, remember they *replace* the defaults. You gain full control but lose the default exclusions. For example, if you use `rules: [\"*.py\"]`, you might get Python files from `.venv/` unless you also add `\"!*.venv/\"`.\n"
+    "*   **Unsure What to Exclude?** If you're crafting `rules` and unsure what to exclude, consider inspecting the project's `.gitignore` file (if available) for patterns commonly ignored by developers. You might adapt these patterns for your `rules` list (remembering `!` means exclude in Jinni rules). You can use list_only to see what would be included if unsure.\n"
 ))
 
 

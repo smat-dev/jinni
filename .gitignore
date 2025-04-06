@@ -176,6 +176,9 @@ cython_debug/
 # Node.js
 node_modules/
 
+# macOS
+.DS_Store
+
 # Project specific
 dev-reference/
 jinni_debug.log

@@ -6,7 +6,7 @@ Jinni is a tool to efficiently provide Large Language Models the context of your
 
 The philosophy behind this tool is that LLM context windows are large, models are smart, and directly seeing your project best equips the model to help with anything you throw at it.
 
-Jinni achieves this through two main components: an MCP (Model Context Protocol) server for integration with AI tools and a command-line utility (CLI) for manual use that copies project context to the clipboard ready to paste wherever you need it.
+There is an MCP (Model Context Protocol) server for integration with AI tools and a command-line utility (CLI) for manual use that copies project context to the clipboard ready to paste wherever you need it.
 
 These tools are opinionated about what counts as relevant project context to best work out of the box in most use cases, automatically excluding:
 
@@ -20,6 +20,8 @@ The MCP server can provide as much or as little of the project as desired. By de
 
 # Quickstart for MCP
 
+MCP server config for Cursor / Roo / Claude Desktop / client of choice:
+
 ```json
 {
     "mcpServers": {
@@ -31,6 +33,14 @@ The MCP server can provide as much or as little of the project as desired. By de
     }
 }
 ```
+
+You an now ask the agent to read in context.
+
+If you want to restrict this to particular modules / paths just ask - e.g. "Read context for tests".
+
+In action with Cursor:
+
+<img src="assets/use_example.png" alt="Usage Example">
 
 ## Components
 

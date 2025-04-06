@@ -1,4 +1,0 @@
-pathspec
-mcp
-pyperclip
-pydantic

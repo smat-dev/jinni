@@ -65,7 +65,7 @@ Jinni uses `.contextfiles` (or an override file) to determine which files and di
     *   **Directory Matching:** A trailing `/` matches directories only.
     *   **Wildcards:** `*`, `**`, `?` work as in `.gitignore`.
 *   **Rule Application Logic:**
-    1.  **Override Check:** If `--overrides` (CLI) or `rules` (MCP) are provided, these rules are used exclusively. All `.contextfiles` and built-in defaults are ignored.
+    1.  **Override Check:** If `--overrides` (CLI) or `rules` (MCP) are provided, these rules are used exclusively. **IMPORTANT:** All `.contextfiles` and built-in default rules (which exclude common directories like `.git/`, `node_modules/`, `.venv/`, etc.) are ignored. If you use overrides, you may need to explicitly add back common exclusions if you don't want those files included.
     2.  **Dynamic Context Rules (No Overrides):** When processing a file or directory, Jinni:
         *   Finds all `.contextfiles` starting from a common root directory down to the current item's directory.
         *   Combines the rules from these files (parent rules first, child rules last) along with built-in default rules.
@@ -107,6 +107,14 @@ utils/*.sh
 # Exclude a specific generated file within src, even if *.py is included elsewhere
 !generated_parser.py
 ```
+
+**Guidance for AI Model Usage**
+
+When requesting context using the `read_context` tool:
+*   **Default Behavior:** If you provide an empty `rules` list (`[]`), Jinni uses sensible default exclusions (like `.git`, `node_modules`, `__pycache__`, common binary types) combined with any project-specific `.contextfiles`. This usually provides the "canonical context" - files developers typically track in version control.
+*   **Targeting Specific Files:** If you need specific files (e.g., `["src/main.py", "README.md"]`), provide them in the `targets` list. This is efficient and precise.
+*   **Using `rules` (Overrides):** If you provide specific `rules`, remember they *replace* the defaults. You gain full control but lose the default exclusions. For example, if you use `rules: ["*.py"]`, you might get Python files from `.venv/` unless you also add `"!*.venv/"`.
+*   **Unsure What to Exclude?** If you're crafting `rules` and unsure what to exclude, consider inspecting the project's `.gitignore` file (if available) for patterns commonly ignored by developers. You might adapt these patterns for your `rules` list (remembering `!` means exclude in Jinni rules).
 """
 
 # --- Helper Functions (Moved from core_logic.py) ---
