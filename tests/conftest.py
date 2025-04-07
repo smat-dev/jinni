@@ -161,11 +161,18 @@ def _create_test_structure(base_path: Path):
     nested_dir.mkdir(exist_ok=True)
     (src_dir / "nested" / "deep.py").write_text("# Deep", encoding='utf-8')
     (src_dir / "nested" / "data.log").write_text("Nested log", encoding='utf-8') # Excluded by root !*.log
+    (src_dir / "nested" / "other.txt").write_text("Nested text", encoding='utf-8') # Add missing file creation
 
     # Hidden dir (excluded by default)
     hidden_dir = base_path / ".hidden_dir"
     hidden_dir.mkdir(exist_ok=True)
     (hidden_dir / "hidden_file.txt").write_text("Hidden content", encoding='utf-8')
+
+    # Dot-directory to test targeting excluded dirs
+    dot_test_dir = base_path / ".testdir"
+    dot_test_dir.mkdir(exist_ok=True)
+    (dot_test_dir / "yes").write_text("it worked", encoding='utf-8')
+    (dot_test_dir / ".nope").write_text("should be excluded", encoding='utf-8')
 
 
 def run_jinni_cli(args: List[str]):

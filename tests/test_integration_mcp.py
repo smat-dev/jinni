@@ -79,6 +79,7 @@ async def test_mcp_read_context_list_only(test_environment: Path):
         "docs/index.md",          # Included via *.md
         "src/app.py",             # Included via src/, .hidden_in_src excluded
         "src/nested/deep.py",     # Included via src/
+        "src/nested/other.txt",   # Add missing file
         "src/utils.py",           # Included via src/
     ])
     assert actual_files == expected_files, f"Expected {expected_files}, got {actual_files}"
@@ -93,7 +94,7 @@ async def test_mcp_read_context_inline_rules(test_environment: Path):
     arguments = {
         "project_root": str(test_dir),
         "targets": [str(test_dir)], # Mandatory targets
-        "rules": [ "*.py", "!src/app.py", "lib/**" ] # Inline rules are mandatory
+        "rules": [ "**/*.py", "!src/app.py", "lib/**" ] # Rely on **/*.py for traversal
     }
     result = await run_mcp_tool_call(tool_name, arguments)
 
@@ -103,10 +104,10 @@ async def test_mcp_read_context_inline_rules(test_environment: Path):
     stdout_text = result.content[0].text
 
     # Assertions based on inline rules (override) + defaults:
-    assert "File: main.py" in stdout_text # Included by inline *.py
-    assert "File: src/utils.py" in stdout_text # Included by inline *.py
-    assert "File: src/nested/deep.py" in stdout_text # Included by inline *.py
-    assert "File: lib/somelib.py" in stdout_text # Included by inline *.py
+    assert "File: main.py" in stdout_text # Included by inline **/*.py
+    assert "File: src/utils.py" in stdout_text # Included by inline **/*.py
+    assert "File: src/nested/deep.py" in stdout_text # Included by inline **/*.py
+    assert "File: lib/somelib.py" in stdout_text # Included by inline **/*.py
 
     assert "File: src/app.py" not in stdout_text # Excluded by inline !src/app.py
     # Check files included by root file rules are NOT included now unless matched by inline *.py
@@ -216,6 +217,52 @@ async def test_mcp_read_context_target_list_mixed(test_environment: Path):
     # Ensure hidden file in src is still excluded by default rules
     assert ".hidden_in_src" not in stdout_text
     # Ensure files outside the targets are not present
+    assert "File: main.py" not in stdout_text
+    assert "File: README.md" not in stdout_text
+
+
+@pytest.mark.asyncio
+async def test_mcp_target_dir_ignores_parent_rules(test_environment: Path):
+    """Test MCP targeting a dir ignores parent rules and uses local rules."""
+    test_dir = test_environment
+    # Root rule excludes utils.py
+    (test_dir / ".contextfiles").write_text("!**/utils.py", encoding='utf-8')
+    # Local rule in src excludes data.json
+    (test_dir / "src" / ".contextfiles").write_text("!data.json", encoding='utf-8')
+
+    tool_name = "read_context"
+    arguments = {
+        "project_root": str(test_dir),
+        "targets": [str(test_dir / "src")], # Target the src directory
+        "rules": [] # Use default rules discovery (relative to target)
+    }
+    result = await run_mcp_tool_call(tool_name, arguments)
+
+    assert isinstance(result, types.CallToolResult)
+    assert not result.isError
+    assert len(result.content) == 1 and isinstance(result.content[0], types.TextContent)
+    stdout_text = result.content[0].text
+
+    # Expected includes based on rules relative to src:
+    # - app.py (included by default *)
+    # - utils.py (included by default *, root !**/utils.py ignored)
+    # - nested/deep.py (included by default *)
+    # - nested/other.txt (included by default *)
+    # Expected excludes:
+    # - data.json (excluded by src/.contextfiles !data.json)
+    # - .hidden_in_src (excluded by default !.* relative to src)
+
+    # Check included
+    assert "File: src/app.py" in stdout_text
+    assert "File: src/utils.py" in stdout_text # Should be included now
+    assert "File: src/nested/deep.py" in stdout_text
+    assert "File: src/nested/other.txt" in stdout_text
+
+    # Check excluded
+    assert "File: src/data.json" not in stdout_text # Excluded by local rule
+    assert "File: src/.hidden_in_src" not in stdout_text # Excluded by default rule relative to src
+
+    # Check files outside target are not included
     assert "File: main.py" not in stdout_text
     assert "File: README.md" not in stdout_text
 

@@ -221,9 +221,9 @@ def read_context(
             elif current_target_path.is_dir():
                 if debug_explain: logger.debug(f"Processing directory target: {current_target_path}")
                 dir_output_parts, dir_total_size, dir_processed_files = walk_and_process(
-                    walk_target_path=current_target_path,
-                    rule_discovery_root=rule_discovery_root,
-                    output_rel_root=output_rel_root,
+                    walk_target_path=current_target_path, # This is now the root for rule discovery/matching
+                    # rule_discovery_root is removed
+                    output_rel_root=output_rel_root, # Still needed for final output paths
                     initial_target_paths_set=initial_target_paths_set, # Pass initial targets
                     use_overrides=use_overrides,
                     override_spec=override_spec,
@@ -231,6 +231,7 @@ def read_context(
                     list_only=list_only,
                     include_size_in_list=include_size_in_list,
                     debug_explain=debug_explain
+                    # rule_application_root is removed
                 )
                 output_parts.extend(dir_output_parts)
                 processed_files_set.update(dir_processed_files)

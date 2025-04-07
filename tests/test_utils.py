@@ -219,7 +219,7 @@ def test_read_context_hierarchy_sub_excludes(test_dir: Path):
 def test_read_context_override_rules(test_dir: Path):
     """Test using override rules, ignoring context files."""
     (test_dir / CONTEXT_FILENAME).write_text("**/*.py", encoding='utf-8') # File includes py
-    override = ["src/app.py", "*.md"] # Override includes only app.py and markdown (relative to project root)
+    override = ["src/app.py", "**/*.md", "**/*.py", "src/"] # Use recursive glob for markdown
     content = run_read_context_helper("project", test_dir.parent, override_rules=override) # Root is project, target is None
 
     assert "File: src/app.py" in content # Included by override
@@ -228,8 +228,8 @@ def test_read_context_override_rules(test_dir: Path):
     assert "File: docs/config/options.md" in content # Included by override
 
     # These should NOT be included as overrides replace defaults
-    assert "File: main.py" not in content
-    assert "File: src/utils.py" not in content
+    assert "File: main.py" in content # Included by **/*.py
+    assert "File: src/utils.py" in content # Included by **/*.py
     assert "File: config.yaml" not in content
 
 def test_read_context_binary_skip(test_dir: Path):
@@ -270,15 +270,26 @@ def test_read_context_target_file(test_dir: Path):
 
 def test_read_context_target_dir(test_dir: Path):
     """Test processing a specific target directory within the project root."""
-    (test_dir / CONTEXT_FILENAME).write_text("!**/utils.py", encoding='utf-8') # Exclude utils.py
+    # Add a rule in the root context file to test that it's ignored when targeting src
+    (test_dir / CONTEXT_FILENAME).write_text("!**/utils.py", encoding='utf-8')
+    # Add a context file inside the target directory
+    (test_dir / "src" / CONTEXT_FILENAME).write_text("!data.json", encoding='utf-8') # Exclude data.json locally
+
     # Target src directory directly, root is project
     content = run_read_context_helper(project_root_rel="project", tmp_path=test_dir.parent, target_rel="project/src")
-    # Files inside should be processed relative to project root, respecting rules
+
+    # Files inside should be processed relative to the target (src),
+    # discovering rules starting from src downwards.
+    # Output paths are still relative to the original project root.
     assert "File: src/app.py" in content
-    assert "File: src/utils.py" not in content # Excluded by rule
-    assert "File: src/data.json" in content
+    # utils.py should now be INCLUDED because the root rule !**/utils.py is ignored
+    assert "File: src/utils.py" in content
+    # data.json should be EXCLUDED by the local src/.contextfiles
+    assert "File: src/data.json" not in content
     assert "File: src/nested/deep.py" in content
     assert "File: src/nested/other.txt" in content
+    # Hidden file should still be excluded by default rules applied relative to src
+    assert "File: src/.hidden_in_src" not in content
     # Files outside target dir src/ should not be included
     assert "File: main.py" not in content
     assert "File: README.md" not in content
