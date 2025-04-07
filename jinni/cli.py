@@ -139,7 +139,8 @@ def handle_read_command(args):
                     logger.debug("Output successfully copied to clipboard.")
                 except Exception as e:
                     # Pyperclip might raise various errors depending on the OS and setup
-                    logger.error(f"Failed to copy output to clipboard: {e}") # Keep error log level
+                    # Log as debug, as clipboard failure is usually non-critical and only relevant for debugging
+                    logger.debug(f"Failed to copy output to clipboard: {e}")
 
 
     except FileNotFoundError as e:
