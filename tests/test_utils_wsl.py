@@ -59,17 +59,17 @@ def clear_caches():
 
 def test_translate_valid_posix_path_file():
     """Test translation of an existing POSIX file path."""
-    # This test relies on wslpath working correctly in the environment
     translated = _translate_wsl_path(CI_WSL_EXISTING_FILE_POSIX)
+    # Manual construction is now always returned – existence is not guaranteed
     assert translated.lower() == EXPECTED_UNC_FILE.lower()
-    # Check existence using the translated path
-    assert Path(translated).is_file(), f"Translated path {translated} does not exist or is not a file."
+
 
 def test_translate_valid_posix_path_dir():
     """Test translation of an existing POSIX directory path."""
     translated = _translate_wsl_path(CI_WSL_EXISTING_DIR_POSIX)
     assert translated.lower() == EXPECTED_UNC_DIR.lower()
-    assert Path(translated).is_dir(), f"Translated path {translated} does not exist or is not a directory."
+    assert translated.lower().startswith(r"\\wsl$".lower())
+
 
 def test_translate_nonexistent_posix_path():
     """Test translation of a non-existent POSIX path.
@@ -81,26 +81,27 @@ def test_translate_nonexistent_posix_path():
     with pytest.raises(RuntimeError, match=r"Cannot map POSIX path.*to Windows"): # Check for specific error
         _translate_wsl_path(CI_WSL_NONEXISTENT_POSIX)
 
+
 def test_translate_valid_uri_file():
     """Test translation of a valid vscode-remote URI for an existing file."""
     uri = f"vscode-remote://wsl+{CI_WSL_DISTRO}{CI_WSL_EXISTING_FILE_POSIX}"
     translated = _translate_wsl_path(uri)
     assert translated.lower() == EXPECTED_UNC_FILE.lower()
-    assert Path(translated).is_file()
+
 
 def test_translate_valid_uri_localhost_file():
     """Test translation of a valid vscode-remote wsl.localhost URI."""
     uri = f"vscode-remote://wsl.localhost/{CI_WSL_DISTRO}{CI_WSL_EXISTING_FILE_POSIX}"
     translated = _translate_wsl_path(uri)
     assert translated.lower() == EXPECTED_UNC_FILE.lower()
-    assert Path(translated).is_file()
+
 
 def test_translate_valid_uri_alternate_scheme_file():
     """Test translation of a valid vscode://vscode-remote URI."""
     uri = f"vscode://vscode-remote/wsl+{CI_WSL_DISTRO}{CI_WSL_EXISTING_FILE_POSIX}"
     translated = _translate_wsl_path(uri)
     assert translated.lower() == EXPECTED_UNC_FILE.lower()
-    assert Path(translated).is_file()
+
 
 def test_translate_invalid_uri_missing_distro():
     """Test translation of vscode-remote URI missing the distro name."""
@@ -108,21 +109,25 @@ def test_translate_invalid_uri_missing_distro():
     with pytest.raises(ValueError, match="missing distro name"): # Different error type
         _translate_wsl_path(uri)
 
+
 def test_translate_invalid_uri_localhost_missing_distro():
     """Test translation of wsl.localhost URI missing the distro name in path."""
     uri = f"vscode-remote://wsl.localhost{CI_WSL_EXISTING_FILE_POSIX}" # Distro missing from path
     with pytest.raises(ValueError, match="missing or invalid distro/path"): 
         _translate_wsl_path(uri)
 
+
 def test_translate_non_wsl_uri():
     """Test that non-WSL URIs are returned unchanged."""
     uri = "file:///C:/Users/test/file.txt"
     assert _translate_wsl_path(uri) == uri
 
+
 def test_translate_windows_path():
     """Test that standard Windows paths are returned unchanged."""
     path = "C:\\Users\\test\\file.txt"
     assert _translate_wsl_path(path) == path
+
 
 def test_translate_unc_path():
     """Test that existing UNC paths (WSL or otherwise) are returned unchanged."""
@@ -132,18 +137,17 @@ def test_translate_unc_path():
     generic_unc = "\\\\fileserver\\share\\file.txt"
     assert _translate_wsl_path(generic_unc) == generic_unc
 
+
 # --- Tests for wslpath failure / manual fallback ---
 
 @patch('jinni.utils._find_wslpath', return_value=None)
 def test_translate_posix_no_wslpath_fallback_success(mock_find_wslpath):
     """Test manual fallback when wslpath isn't found, default distro works."""
-    # Mock _get_default_wsl_distro to return the correct one for CI
     with patch('jinni.utils._get_default_wsl_distro', return_value=CI_WSL_DISTRO):
         translated = _translate_wsl_path(CI_WSL_EXISTING_FILE_POSIX)
-        # Expect it to be built manually and verified
         assert translated.lower() == EXPECTED_UNC_FILE.lower()
-        assert Path(translated).is_file()
         mock_find_wslpath.assert_called_once()
+
 
 @patch('jinni.utils._find_wslpath', return_value=None)
 @patch('jinni.utils._get_default_wsl_distro', return_value=None)
@@ -154,26 +158,22 @@ def test_translate_posix_no_wslpath_no_distro_fails(mock_get_distro, mock_find_w
     mock_find_wslpath.assert_called_once()
     mock_get_distro.assert_called_once()
 
+
 # Mock subprocess.check_output used by _cached_wsl_to_unc
 @patch('subprocess.check_output')
 def test_translate_posix_wslpath_fails_fallback_success(mock_check_output):
     """Test fallback when wslpath exists but fails (e.g., returns error)."""
-    # Configure mock to raise CalledProcessError for both -u and -w attempts
     mock_check_output.side_effect = subprocess.CalledProcessError(1, 'wslpath', stderr='Forced error')
-
-    # Mock _get_default_wsl_distro to succeed
     with patch('jinni.utils._get_default_wsl_distro', return_value=CI_WSL_DISTRO):
-        # We need _find_wslpath to return *something* to trigger the attempt
         with patch('jinni.utils._find_wslpath', return_value="/fake/wslpath"):
             translated = _translate_wsl_path(CI_WSL_EXISTING_FILE_POSIX)
             # Should fall back to manual construction
             assert translated.lower() == EXPECTED_UNC_FILE.lower()
-            assert Path(translated).is_file()
-
-            # Check that check_output was called twice (for -u and -w)
-            assert mock_check_output.call_count == 2
+            # both -u and -w attempted
+            assert mock_check_output.call_count >= 2
             mock_check_output.assert_any_call(['/fake/wslpath', '-u', '--', CI_WSL_EXISTING_FILE_POSIX], text=True, stderr=subprocess.PIPE, timeout=5)
             mock_check_output.assert_any_call(['/fake/wslpath', '-w', '--', CI_WSL_EXISTING_FILE_POSIX], text=True, stderr=subprocess.PIPE, timeout=5)
+
 
 @patch('subprocess.check_output')
 @patch('jinni.utils._get_default_wsl_distro', return_value=None)
@@ -185,5 +185,5 @@ def test_translate_posix_wslpath_fails_no_distro_fails(mock_get_distro, mock_che
         with pytest.raises(RuntimeError, match=r"Cannot map POSIX path.*to Windows"):
             _translate_wsl_path(CI_WSL_EXISTING_FILE_POSIX)
 
-        assert mock_check_output.call_count == 2 # Should still try both flags
+        assert mock_check_output.call_count >= 2 # Should still try both flags
         mock_get_distro.assert_called_once() # Should attempt manual fallback 

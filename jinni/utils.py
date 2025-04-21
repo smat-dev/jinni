@@ -613,7 +613,7 @@ def _translate_wsl_path(path_str: str) -> str:
             share_root = Path(fr"\\wsl$\{assumed_distro}")
             if not share_root.exists():
                 logger.debug(
-                    "UNC share root %s still not visible – continuing anyway",
+                    "UNC share root %s still not visible — continuing anyway",
                     share_root,
                 )
 
