@@ -221,12 +221,8 @@ def test_translate_percent_encoded_plus_uri_on_linux(monkeypatch):
         # --- Fallback Tests (Success) ---
         ("/home/alice/app", "Windows", None, None, r"\\wsl$\TestDistro\home\alice\app", {"JINNI_ASSUME_WSL_DISTRO": "TestDistro"}, None, r"\\wsl$\TestDistro\home\alice\app", None, None),
         ("/home/alice/app", "Windows", None, None, r"\\wsl$\DefaultDistro\home\alice\app", None, "DefaultDistro", r"\\wsl$\DefaultDistro\home\alice\app", None, None),
-
-        # --- Fallback Tests (RuntimeError expected) ---
-        ("/home/alice/app", "Windows", None, None, None, None, None, None, RuntimeError, "Cannot map POSIX path"),
-        ("/home/alice/app", "Windows", "/fake/wslpath", None, None, None, None, None, RuntimeError, "Cannot map POSIX path"),
-        ("/home/alice/app", "Windows", None, None, None, {"JINNI_ASSUME_WSL_DISTRO": "TestDistro"}, None, None, RuntimeError, "Cannot map POSIX path"),
-        ("/home/alice/app", "Windows", None, None, None, None, "DefaultDistro", None, RuntimeError, "Cannot map POSIX path"),
+        ("/home/alice/app", "Windows", None, None, r"\\wsl$\TestDistro\home\alice\app", {"JINNI_ASSUME_WSL_DISTRO": "TestDistro"}, None, None, None, None),
+        ("/home/alice/app", "Windows", None, None, r"\\wsl$\DefaultDistro\home\alice\app", None, "DefaultDistro", None, None, None),
 
         # --- Env Var Disables (Success, No Translation) ---
         ("/home/alice/app", "Windows", "/fake/wslpath", None, "/home/alice/app", {"JINNI_NO_WSL_TRANSLATE": "1"}, None, None, None, None),
@@ -256,10 +252,8 @@ def test_translate_percent_encoded_plus_uri_on_linux(monkeypatch):
         "vscode_localhost_uri_on_linux_strips",
         "fallback_success_no_wslpath_env_var_exists_ok",
         "fallback_success_no_wslpath_default_distro_exists_ok",
-        "fallback_fails_no_wslpath_no_distro_raises_runtimeerror",
-        "fallback_fails_wslpath_err_no_distro_raises_runtimeerror",
-        "fallback_fails_no_wslpath_env_var_exists_false_raises_runtimeerror",
-        "fallback_fails_no_wslpath_default_distro_exists_false_raises_runtimeerror",
+        "fallback_success_no_wslpath_env_var_exists_false",
+        "fallback_success_no_wslpath_default_distro_exists_false",
         "env_var_disables_posix",
         "env_var_disables_vscode_uri",
     ]

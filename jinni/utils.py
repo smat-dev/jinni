@@ -94,7 +94,7 @@ def _build_unc_path(distro: str, linux_path: str) -> str:
 @lru_cache(maxsize=256)
 def _cached_wsl_to_unc(wslpath_executable: str, posix_path: str) -> str | None:
     """
-    Return a verified UNC (\\\\wsl$\\...) for *posix_path* or None if wslpath
+    Return a verified UNC (\\wsl$\...) for *posix_path* or None if wslpath
     can't supply one.
     Uses wslpath -u first, then -w, checking existence for each.
     Caches the result (including None if no valid path is found).
@@ -152,7 +152,9 @@ def _cached_wsl_to_unc(wslpath_executable: str, posix_path: str) -> str | None:
     if unc:
         return unc
 
-    # 3️⃣ If both failed, return None (caller handles manual fallback)
+    # 3️⃣ If both failed we **do not cache** the negative result –
+    #    a later call might succeed once the share is up.
+    _cached_wsl_to_unc.cache_clear()          # purge the (None) entry
     logger.debug(f"Both wslpath -u and -w failed to produce a verified UNC path for '{posix_path}'.")
     return None
 
@@ -602,28 +604,15 @@ def _translate_wsl_path(path_str: str) -> str:
         if assumed_distro:
             logger.debug(f"Using assumed WSL distro '{assumed_distro}' from {distro_source} for manual UNC path construction.")
             candidate_unc_path = _build_unc_path(assumed_distro, path_str)
-            logger.debug(f"Checking existence of manually constructed path: {candidate_unc_path}")
-            path_exists = False # Initialize before try block
-            try:
-                 # Check if the constructed path exists (important step!)
-                 # Use pathlib for potentially easier existence check on UNC
-                 path_exists = Path(candidate_unc_path).exists()
-                 if path_exists:
-                     logger.debug(f"Manually constructed UNC path exists. Returning: {candidate_unc_path}")
-                     return candidate_unc_path
-                 else:
-                     logger.debug(f"Manually constructed UNC path does not exist: {candidate_unc_path}")
-                     # Fall through to raise RuntimeError after try-except block
-            except Exception as e_exists:
-                 # Catch potential errors during Path(unc).exists()
-                 # These are likely permission issues or unexpected FS states, log as debug.
-                 logger.debug(f"Error checking existence of manually constructed UNC path {candidate_unc_path}: {e_exists}")
-                 # Fall through to raise RuntimeError after try-except block
 
-            # If we reach here, either the path didn't exist or checking existence failed.
-            if not path_exists:
-                logger.debug("Manual fallback failed: Path does not exist or check failed.")
-                # Fall through to raise RuntimeError outside the 'if assumed_distro' block
+            # We just need to know the **share** is live; probing the final
+            # file is flaky on fresh files (9p latency).  Check the share root
+            # once, then return the path regardless.
+            share_root = Path(fr"\\wsl$\{assumed_distro}")
+            if not share_root.exists():
+                logger.debug("UNC share root %s still not visible – continuing anyway", share_root)
+
+            return candidate_unc_path   # let the caller decide; we're done
         else:
             logger.debug("Could not determine a WSL distro from env var or 'wsl -l -q'. Cannot construct manual UNC path.")
             # Fall through to raise RuntimeError outside the 'if assumed_distro' block
