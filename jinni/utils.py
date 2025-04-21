@@ -9,7 +9,7 @@ import mimetypes
 import string
 import platform, subprocess, shutil
 from urllib.parse import urlparse, unquote, quote
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import List, Tuple, Dict, Optional, Any
 from functools import lru_cache
 
@@ -58,36 +58,103 @@ def _find_wslpath() -> Optional[str]:
         logger.debug("wslpath command not found in PATH.")
         return None
 
-_BAD_UNC_CHARS = '<>:"/\\|?*%'
+# _BAD_UNC_CHARS = '<>:\"/\\|?*%' # OLD
+_BAD_UNC_CHARS = r'<>:"/\\|?*%'
+_UNC_PREFIX = r'\\wsl$'  # Corrected raw string definition
 
 def _build_unc_path(distro: str, linux_path: str) -> str:
     """
-    Helper function to build the WSL UNC path, sanitizing the distro name for UNC.
-    Always emits paths in the \\wsl$\Distro\... format (never \\wsl.localhost\...).
+    Helper function to build the WSL UNC path using pathlib.
+    Always emits paths in the \\wsl$\Distro\... format.
+    Handles illegal characters in distro name.
     """
-    # Replace only illegal UNC chars in the distro name
     safe_distro = distro.translate({ord(c): '_' for c in _BAD_UNC_CHARS})
-    # Ensure linux_path starts with /
     if not linux_path.startswith("/"):
         linux_path = "/" + linux_path
-    # Build UNC path, replacing forward slashes in the linux_path part
-    # Note: Always emits \\wsl$\... (never \\wsl.localhost\...)
-    windows_unc_path = rf"\\wsl$\{safe_distro}{linux_path}".replace("/", "\\")
-    return windows_unc_path
 
-@lru_cache(maxsize=256) # Cache results for POSIX paths
-def _cached_wsl_to_unc(wslpath_executable: str, posix_path: str) -> Optional[str]:
-    """Calls wslpath -w to convert a POSIX path to a Windows path and caches the result."""
+    relative_linux_path = linux_path.lstrip('/')
+    base_unc_path = PureWindowsPath(f"{_UNC_PREFIX}\\{safe_distro}")
+
     try:
-        windows_unc_path = subprocess.check_output([wslpath_executable, "-w", posix_path], text=True, stderr=subprocess.PIPE).strip()
-        logger.debug(f"Translated POSIX path '{posix_path}' via wslpath to: '{windows_unc_path}'")
-        return windows_unc_path
-    except subprocess.CalledProcessError as e:
-        logger.debug(f"wslpath failed for '{posix_path}' (return code {e.returncode}): {e.stderr.strip()}. Returning original path.")
-        return None # Indicate failure
+        if not relative_linux_path:  # root "/" case
+            # Return exactly two trailing backslashes for UNC root
+            return f"{base_unc_path}\\"
+        else:
+            # Join components using pathlib for robustness
+            return str(base_unc_path.joinpath(*relative_linux_path.split('/')))
     except Exception as e:
-        logger.warning(f"Unexpected error calling wslpath for '{posix_path}': {e}. Returning original path.")
-        return None # Indicate failure
+        logger.error(
+            "Error constructing UNC path with pathlib for distro=%r path=%r: %s",
+            distro, linux_path, e,
+        )
+        # final, brute‑force fallback – guaranteed no further exceptions
+        fallback = rf"{_UNC_PREFIX}\{safe_distro}{linux_path}".replace("/", "\\")
+        return fallback
+
+@lru_cache(maxsize=256)
+def _cached_wsl_to_unc(wslpath_executable: str, posix_path: str) -> str | None:
+    """
+    Return a verified UNC (\\\\wsl$\\...) for *posix_path* or None if wslpath
+    can't supply one.
+    Uses wslpath -u first, then -w, checking existence for each.
+    Caches the result (including None if no valid path is found).
+    """
+    def _try(flag: str) -> str | None:
+        try:
+            # Use '--' to prevent misinterpretation of paths starting with '-'
+            unc = subprocess.check_output(
+                [wslpath_executable, flag, '--', posix_path],
+                text=True,
+                stderr=subprocess.PIPE,
+                timeout=5 # Add a timeout
+            ).strip()
+
+            # Verify it's a \\wsl$ path and it actually exists
+            # Use lower() for case-insensitive check of start
+            if unc.lower().startswith(r"\\wsl$"):
+                # Use Path().exists() for robustness with UNC paths
+                # Add try-except around exists() for potential OS errors
+                try:
+                    if Path(unc).exists():
+                        logger.debug(f"wslpath {flag} returned verified UNC path: {unc}")
+                        return unc
+                    else:
+                         logger.debug(f"wslpath {flag} returned UNC path, but it does not exist: {unc}")
+                except OSError as e_exists:
+                    logger.warning(f"Error checking existence of UNC path '{unc}' from wslpath {flag}: {e_exists}")
+                except Exception as e_generic_exists:
+                    logger.error(f"Unexpected error checking existence of UNC path '{unc}': {e_generic_exists}", exc_info=True)
+            else:
+                logger.debug(f"wslpath {flag} returned non-UNC path: {unc}")
+
+        except subprocess.CalledProcessError as e:
+            # This often means the flag isn't supported or the path is invalid *within WSL*
+            stderr_snippet = e.stderr.strip().splitlines()[0] if e.stderr else "(no stderr)"
+            stderr_snippet = stderr_snippet[:100] + '...' if len(stderr_snippet) > 103 else stderr_snippet
+            logger.debug(f"wslpath {flag} failed for '{posix_path}' (rc={e.returncode}): {stderr_snippet}")
+        except subprocess.TimeoutExpired:
+            logger.warning(f"wslpath {flag} timed out for '{posix_path}'")
+        except FileNotFoundError:
+            # Should not happen if wslpath_executable was found by _find_wslpath, but safety first
+            logger.error(f"wslpath executable '{wslpath_executable}' not found during execution with {flag}.")
+        except Exception as e_call:
+             logger.error(f"Unexpected error calling wslpath {flag} for '{posix_path}': {e_call}", exc_info=True)
+
+        return None # Return None if try block failed or checks didn't pass
+
+    # 1️⃣ Try preferred UNC output (-u) first
+    unc = _try('-u')
+    if unc:
+        return unc
+
+    # 2️⃣ Fallback to Windows path output (-w) but still verify \\wsl$ and existence
+    unc = _try('-w')
+    if unc:
+        return unc
+
+    # 3️⃣ If both failed, return None (caller handles manual fallback)
+    logger.debug(f"Both wslpath -u and -w failed to produce a verified UNC path for '{posix_path}'.")
+    return None
 
 @lru_cache(maxsize=1) # Cache the result of querying WSL
 def _get_default_wsl_distro() -> Optional[str]:
@@ -509,18 +576,20 @@ def _translate_wsl_path(path_str: str) -> str:
     elif path_str.startswith("/") and not parsed.scheme:
         wslpath_exe = _find_wslpath() # Lazy lookup
         if wslpath_exe:
-            win_path = _cached_wsl_to_unc(wslpath_exe, path_str)
-            if win_path:
-                logger.debug(f"Translated POSIX path '{path_str}' using wslpath.")
-                return win_path # Return translated UNC path
+            # Call the new function which tries -u, then -w, and verifies existence
+            verified_unc_path = _cached_wsl_to_unc(wslpath_exe, path_str)
+            if verified_unc_path:
+                logger.debug(f"Translated POSIX path '{path_str}' to verified UNC: '{verified_unc_path}'")
+                return verified_unc_path # Return the verified UNC path
             else:
-                # wslpath call failed, _cached_wsl_to_unc logged it.
-                # Continue to manual fallback.
-                logger.debug(f"wslpath call failed for '{path_str}'. Attempting manual fallback.")
+                # wslpath call failed or didn't produce a usable path.
+                # _cached_wsl_to_unc logged the details.
+                logger.debug(f"wslpath (via _cached_wsl_to_unc) did not return a verified UNC path for '{path_str}'. Attempting manual fallback.")
+                # Continue to manual fallback below...
         else:
              logger.debug("wslpath executable not found. Attempting manual fallback.")
 
-        # --- Manual Fallback (wslpath failed or not found) ---
+        # --- Manual Fallback (wslpath failed/not found OR _cached_wsl_to_unc returned None) ---
         # Try env var first
         assumed_distro = os.environ.get("JINNI_ASSUME_WSL_DISTRO")
         distro_source = "environment variable JINNI_ASSUME_WSL_DISTRO"
@@ -534,33 +603,39 @@ def _translate_wsl_path(path_str: str) -> str:
             logger.debug(f"Using assumed WSL distro '{assumed_distro}' from {distro_source} for manual UNC path construction.")
             candidate_unc_path = _build_unc_path(assumed_distro, path_str)
             logger.debug(f"Checking existence of manually constructed path: {candidate_unc_path}")
+            path_exists = False # Initialize before try block
             try:
                  # Check if the constructed path exists (important step!)
                  # Use pathlib for potentially easier existence check on UNC
-                 if Path(candidate_unc_path).exists():
+                 path_exists = Path(candidate_unc_path).exists()
+                 if path_exists:
                      logger.debug(f"Manually constructed UNC path exists. Returning: {candidate_unc_path}")
                      return candidate_unc_path
                  else:
-                     # Catch potential errors during Path(unc).exists()
-                     # These are likely permission issues or unexpected FS states, log as debug.
-                     logger.debug(f"Error checking existence of manually constructed UNC path {candidate_unc_path}: {e_exists}")
-                     # Fall through to raise RuntimeError
+                     logger.debug(f"Manually constructed UNC path does not exist: {candidate_unc_path}")
+                     # Fall through to raise RuntimeError after try-except block
             except Exception as e_exists:
                  # Catch potential errors during Path(unc).exists()
                  # These are likely permission issues or unexpected FS states, log as debug.
                  logger.debug(f"Error checking existence of manually constructed UNC path {candidate_unc_path}: {e_exists}")
-                 # Fall through to raise RuntimeError
+                 # Fall through to raise RuntimeError after try-except block
+
+            # If we reach here, either the path didn't exist or checking existence failed.
+            if not path_exists:
+                logger.debug("Manual fallback failed: Path does not exist or check failed.")
+                # Fall through to raise RuntimeError outside the 'if assumed_distro' block
         else:
             logger.debug("Could not determine a WSL distro from env var or 'wsl -l -q'. Cannot construct manual UNC path.")
+            # Fall through to raise RuntimeError outside the 'if assumed_distro' block
 
-            # If manual fallback failed (no distro or path doesn't exist)
-            # Truncate potentially long path in error message
-            truncated_path = path_str[:50] + '...' if len(path_str) > 53 else path_str
-            raise RuntimeError(
-                f"Cannot map POSIX path starting with '{truncated_path}' to Windows. WSL may not be available or path is invalid within the default/assumed distro. "
-                f"Ensure WSL is installed and functional, or run Jinni inside the WSL distro. "
-                f"You can also set JINNI_ASSUME_WSL_DISTRO if the default distro is incorrect."
-            )
+        # If manual fallback failed (no distro OR path doesn't exist/check failed)
+        # Truncate potentially long path in error message
+        truncated_path = path_str[:50] + '...' if len(path_str) > 53 else path_str
+        raise RuntimeError(
+            f"Cannot map POSIX path starting with '{truncated_path}' to Windows. WSL may not be available or path is invalid within the default/assumed distro. "
+            f"Ensure WSL is installed and functional, or run Jinni inside the WSL distro. "
+            f"You can also set JINNI_ASSUME_WSL_DISTRO if the default distro is incorrect."
+        )
 
     # 4) No translation needed or possible (Windows path, other URI scheme, etc.)
     logger.debug(f"Path '{path_str}' did not match WSL translation conditions on Windows. Returning original.")

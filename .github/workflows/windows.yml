@@ -18,7 +18,7 @@ jobs:
     # ──────────────────────────────────────────
     #  Python / deps
     # ──────────────────────────────────────────
-    - name: Set‑up Python 3.11
+    - name: Set-up Python 3.11
       uses: actions/setup-python@v5
       with:
         python-version: "3.11"
@@ -44,10 +44,10 @@ jobs:
     # ──────────────────────────────────────────
     #  Provision WSL (Ubuntu 22.04)
     # ──────────────────────────────────────────
-    - name: Enable WSL (Ubuntu 22.04)
+    - name: Enable WSL (Ubuntu 22.04)
       uses: Vampire/setup-wsl@v5
       with:
-        distribution: Ubuntu-22.04   # pre‑installed on GH runners
+        distribution: Ubuntu-22.04   # pre-installed on GH runners
 
     # ──────────────────────────────────────────
     #  Create a tiny project inside WSL
@@ -58,12 +58,12 @@ jobs:
         wsl bash -c 'mkdir -p /home/runner/testproj && echo hi > /home/runner/testproj/hello.txt'
 
     # ──────────────────────────────────────────
-    #  Start WSL & warm‑up the \\wsl$ UNC share
+    #  Start WSL & warm-up the \\wsl$ UNC share
     # ──────────────────────────────────────────
-    - name: Start WSL & warm‑up UNC share
+    - name: Start WSL & warm-up UNC share
       shell: pwsh
       run: |
-        $ErrorActionPreference = 'Continue'   # keep the build going even if UNC warm‑up fails
+        $ErrorActionPreference = 'Continue'   # keep the build going even if UNC warm-up fails
 
         # helper: first listed distro, with NULs stripped
         $distro = wsl -l -q |
@@ -71,7 +71,7 @@ jobs:
                   Select-Object -First 1
 
         if (-not $distro) {
-          Write-Host "No WSL distro found – skipping warm‑up"
+          Write-Host "No WSL distro found – skipping warm-up"
           exit 0
         }
 
@@ -88,15 +88,15 @@ jobs:
         }
 
         if (-not (Test-Path -LiteralPath $unc)) {
-          Write-Host "UNC still not available after $($tries*300) ms – continuing anyway"
+          Write-Host "UNC still not available after $($tries*300) ms – continuing anyway"
         } else {
           Write-Host "UNC is available."
         }
 
     # ──────────────────────────────────────────
-    #  Smoke‑tests jinni path translation
+    #  Smoke-tests jinni path translation
     # ──────────────────────────────────────────
-    - name: Smoke test vscode‑remote URI
+    - name: Smoke test vscode-remote URI
       shell: pwsh
       run: |
         $distro = wsl -l -q |
@@ -124,3 +124,13 @@ jobs:
         $env:JINNI_ASSUME_WSL_DISTRO = $distro
         & $env:VENV_BIN\jinni.exe --list-only '/home/runner/testproj' |
           Select-String 'hello.txt'
+
+    # ──────────────────────────────────────────
+    #  Run WSL-specific unit tests on host
+    # ──────────────────────────────────────────
+    - name: Run pytest (WSL path utils)
+      shell: pwsh
+      run: |
+        Write-Host "Running WSL path translation tests..."
+        & $env:VENV_BIN\Activate.ps1
+        pytest tests/test_utils_wsl.py -v
