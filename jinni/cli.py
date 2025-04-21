@@ -14,6 +14,7 @@ import logging.handlers
 from jinni.core_logic import read_context, DEFAULT_SIZE_LIMIT_MB, ENV_VAR_SIZE_LIMIT # Re-add ENV_VAR_SIZE_LIMIT
 from jinni.exceptions import ContextSizeExceededError, DetailedContextSizeError # Exceptions moved
 from jinni.utils import ESSENTIAL_USAGE_DOC # Import the shared usage doc constant
+from jinni.utils import _translate_wsl_path # Import the WSL path translator
 # ENV_VAR_SIZE_LIMIT is likely handled internally now
 import pyperclip # Added for clipboard functionality
 
@@ -32,14 +33,25 @@ def handle_usage_command(args):
 def handle_read_command(args):
     """Handles the context reading logic."""
     logger.debug("Executing context read logic.")
-    # --- Input Validation ---
-    input_paths = args.paths # Use 'paths' from main parser (list)
+    # --- Translate WSL Paths First ---
+    # Translate input paths *before* any Path object creation or validation
+    translated_input_paths = [_translate_wsl_path(p) for p in args.paths]
+    translated_project_root = _translate_wsl_path(args.project_root) if args.project_root else None
+    translated_overrides_file = _translate_wsl_path(args.overrides) if args.overrides else None # Translate overrides path
+    logger.debug(f"Original input paths: {args.paths} -> Translated: {translated_input_paths}")
+    if args.project_root:
+        logger.debug(f"Original project root: {args.project_root} -> Translated: {translated_project_root}")
+    if args.overrides:
+        logger.debug(f"Original overrides file: {args.overrides} -> Translated: {translated_overrides_file}")
+
+    # --- Use Translated Paths for Input Validation ---
+    input_paths = translated_input_paths # Use translated paths from now on
     output_file = args.output
     list_only = args.list_only
-    overrides_file = args.overrides
+    overrides_file = translated_overrides_file # Use translated overrides path
     size_limit_mb = args.size_limit_mb
     debug_explain = args.debug_explain
-    project_root = args.project_root # Optional root from main parser
+    project_root = translated_project_root # Use translated root from now on
     no_copy_flag = args.no_copy
 
     # --- Configure Logging ---

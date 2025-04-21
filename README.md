@@ -133,7 +133,7 @@ jinni [OPTIONS] [<PATH...>]
 *   **`--root <DIR>` / `-r <DIR>` (optional):** See above.
 *   **`--no-copy` (optional):** Prevent automatically copying the output content to the system clipboard when printing to standard output (the default is to copy).
 
-### Installation
+## Installation
 
 You can install Jinni using `pip` or `uv`:
 
@@ -149,7 +149,20 @@ uv pip install jinni
 
 This will make the `jinni` CLI command available in your environment. See the "Running the Server" section above for how to start the MCP server depending on your installation method.
 
-### Examples
+## Platform-specific notes
+
+### Windows + WSL
+> Jinni v0.1.7+ auto-converts WSL paths.  
+>   
+> • Provide either of these as `project_root` (CLI `--root` or MCP argument):
+> ```bash
+> /home/you/project
+> vscode-remote://wsl+Ubuntu-22.04/home/you/project
+> ```  
+> • No wrappers, mounts, or extra flags required—Jinni resolves the UNC path (`\\wsl$\...`) on Windows automatically.
+> • Only `wsl+<distro>` URIs and absolute POSIX paths (starting with `/`) are translated; for SSH or container remotes, run Jinni inside that environment.
+
+## Examples
 
 *   **Dump context of `my_project/` to the console:**
     ```bash

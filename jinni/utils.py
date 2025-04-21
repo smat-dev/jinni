@@ -7,6 +7,8 @@ import datetime
 import logging
 import mimetypes
 import string
+import platform, subprocess, shutil
+from urllib.parse import urlparse, unquote
 from pathlib import Path
 from typing import List, Tuple, Dict, Optional, Any
 
@@ -35,6 +37,13 @@ logger = logging.getLogger("jinni.utils") # Use a specific logger for utils
 if not logger.handlers and not logging.getLogger().handlers:
      # Basic config if running standalone or not configured by main app
      logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# --- Cache wslpath lookup ---
+_WSLPATH_PATH = shutil.which("wslpath")
+if _WSLPATH_PATH:
+    logger.debug(f"Found wslpath executable at: {_WSLPATH_PATH}")
+else:
+    logger.debug("wslpath command not found in PATH.")
 
 
 # --- Constants moved temporarily or redefined ---
@@ -315,3 +324,71 @@ def _find_context_files_for_dir(dir_path: Path, root_path: Path) -> List[Path]:
             logger.debug(f"Found context file: {context_file}")
 
     return context_files
+
+# --- WSL Path Translation Helper ---
+
+def _translate_wsl_path(path_str: str) -> str:
+    """
+    Convert POSIX paths *or* vscode-remote WSL URIs to a Windows path when running on Windows.
+    Always returns a string; the caller is responsible for converting to Path if needed.
+    """
+    # --- Initial Guards ---
+    if not path_str:
+        return path_str # Return empty string if input is empty
+    if platform.system() != "Windows":
+        return path_str # Only translate on Windows
+
+    parsed = urlparse(path_str)
+    logger.debug(f"Parsing path/URI '{path_str}': scheme='{parsed.scheme}', netloc='{parsed.netloc}', path='{parsed.path}'")
+
+    # 1) Handle vscode-remote://wsl+Distro/path
+    if parsed.scheme == "vscode-remote" and parsed.netloc.startswith("wsl+"):
+        authority = parsed.netloc # e.g., wsl+Ubuntu
+        distro = authority[len("wsl+"):]
+        if not distro:
+            logger.warning(f"WSL URI authority '{authority}' is missing distro name. Returning original path: '{path_str}'")
+            return path_str
+        linux_path = unquote(parsed.path) # e.g., /home/user/project
+        if not linux_path.startswith("/"): linux_path = "/" + linux_path
+        # Correct UNC path format with separator
+        windows_unc_path = rf"\\wsl$\{distro}{linux_path}".replace("/", "\\")
+        logger.debug(f"Translated vscode-remote URI '{path_str}' to UNC: '{windows_unc_path}'")
+        return windows_unc_path
+
+    # 2) Handle vscode://vscode-remote/wsl+Distro/path
+    elif parsed.scheme == "vscode" and parsed.netloc == "vscode-remote":
+        # Path is like /wsl+Distro/path
+        path_parts = parsed.path.strip("/").split("/", 1) # ['wsl+Distro', 'path'] or ['wsl+Distro']
+        if len(path_parts) >= 1 and path_parts[0].startswith("wsl+"):
+            authority = path_parts[0] # e.g., wsl+Ubuntu
+            distro = authority[len("wsl+"):]
+            if not distro:
+                logger.warning(f"Alternate WSL URI authority '{authority}' is missing distro name. Returning original path: '{path_str}'")
+                return path_str
+            linux_path = "/" + unquote(path_parts[1]) if len(path_parts) > 1 else "/"
+            # Correct UNC path format with separator
+            windows_unc_path = rf"\\wsl$\{distro}{linux_path}".replace("/", "\\")
+            logger.debug(f"Translated alternate vscode URI '{path_str}' to UNC: '{windows_unc_path}'")
+            return windows_unc_path
+
+    # 3) Handle pure POSIX path /path/to/file
+    # Check only if it starts with / and has no scheme (to avoid re-processing URIs)
+    # Use cached wslpath result
+    elif path_str.startswith("/") and not parsed.scheme and _WSLPATH_PATH:
+        try:
+            # Use wslpath -w to convert to Windows-style path
+            win_path = subprocess.check_output([_WSLPATH_PATH, "-w", path_str], text=True, stderr=subprocess.PIPE).strip()
+            logger.debug(f"Translated POSIX path '{path_str}' via wslpath to: '{win_path}'")
+            return win_path
+        except subprocess.CalledProcessError as e:
+            # wslpath might fail if the path doesn't exist *inside* WSL
+            logger.debug(f"wslpath failed for '{path_str}' (return code {e.returncode}): {e.stderr.strip()}. Returning original path.")
+            # Fall through to return original path
+        except Exception as e:
+            # Catch other potential errors
+            logger.warning(f"Unexpected error calling wslpath for '{path_str}': {e}. Returning original path.")
+            # Fall through to return original path
+
+    # 4) No translation needed or possible (Windows path, other URI, non-WSL POSIX, wslpath fail)
+    logger.debug(f"Path '{path_str}' did not match any WSL translation conditions. Returning original.")
+    return path_str

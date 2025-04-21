@@ -25,7 +25,7 @@ from mcp.server.fastmcp import FastMCP, Context
 # Import from refactored modules
 from jinni.core_logic import read_context as core_read_context # Main functions from new core_logic
 from jinni.exceptions import ContextSizeExceededError, DetailedContextSizeError # Exceptions moved
-from jinni.utils import ESSENTIAL_USAGE_DOC # Import the shared usage doc constant
+from jinni.utils import ESSENTIAL_USAGE_DOC, _translate_wsl_path # Import the shared usage doc constant and WSL path translator
 # Constants like DEFAULT_SIZE_LIMIT_MB might be needed if used directly, otherwise remove.
 # Let's assume they are handled within core_logic now.
 
@@ -76,7 +76,13 @@ async def read_context(
     debug_explain: bool = False,
 ) -> str:
     logger.info("--- read_context tool invoked ---")
-    logger.debug(f"Received read_context request: project_root='{project_root}', targets='{targets}', list_only={list_only}, rules={rules}, debug_explain={debug_explain}")
+    # Translate incoming paths *before* any validation or Path object creation
+    translated_project_root = _translate_wsl_path(project_root)
+    translated_targets = [_translate_wsl_path(t) for t in targets]
+    logger.debug(f"Original paths: project_root='{project_root}', targets='{targets}'")
+    logger.debug(f"Translated paths: project_root='{translated_project_root}', targets='{translated_targets}'")
+
+    logger.debug(f"Processing read_context request: project_root(orig)='{project_root}', targets(orig)='{targets}', list_only={list_only}, rules={rules}, debug_explain={debug_explain}")
     """
     Generates a concatenated view of relevant code files for a given target path.
 
@@ -97,26 +103,25 @@ async def read_context(
         debug_explain: Print detailed explanation for file/directory inclusion/exclusion to server's stderr. Defaults to False.
     """
     # --- Input Validation ---
-    # Validate project_root
-    if not os.path.isabs(project_root):
-         raise ValueError(f"Tool 'project_root' argument must be absolute, received: '{project_root}'")
-    resolved_project_root_path = Path(project_root).resolve()
+    # Use the translated project_root for validation
+    if not os.path.isabs(translated_project_root):
+         raise ValueError(f"Tool 'project_root' argument must be absolute (after translation), received: '{translated_project_root}' from original '{project_root}'")
+    resolved_project_root_path = Path(translated_project_root).resolve()
     if not resolved_project_root_path.is_dir():
-         raise ValueError(f"Tool 'project_root' path does not exist or is not a directory: {resolved_project_root_path}")
-    resolved_project_root_path_str = str(resolved_project_root_path) # Store as string for core_logic
-    logger.debug(f"Using project_root: {resolved_project_root_path_str}")
+         raise ValueError(f"Tool 'project_root' path does not exist or is not a directory: {resolved_project_root_path} (translated from '{project_root}')")
+    resolved_project_root_path_str = str(resolved_project_root_path) # Store translated path as string
+    logger.debug(f"Using project_root (translated): {resolved_project_root_path_str}")
 
     # Validate mandatory targets list (can be empty)
-    if targets is None: # Should not happen if Pydantic enforces mandatory, but good practice
-        raise ValueError("Tool 'targets' argument is mandatory. Provide an empty list [] to process the entire project root.")
+    # No need for `is None` check, Pydantic/FastMCP ensures it's a list.
 
     resolved_target_paths_str: List[str] = []
     effective_targets_set: Set[str] = set() # Use set to handle duplicates implicitly
 
     # Process the provided targets list if it's not empty
-    if targets:
-        logger.debug(f"Processing provided targets list: {targets}")
-        for idx, single_target in enumerate(targets):
+    if translated_targets:
+        logger.debug(f"Processing translated targets list: {translated_targets}")
+        for idx, single_target in enumerate(translated_targets):
             if not isinstance(single_target, str):
                  raise TypeError(f"Tool 'targets' item at index {idx} must be a string, got {type(single_target)}")
 
@@ -213,7 +218,7 @@ async def read_context(
         # Call the core logic function
         result_content = core_read_context(
             target_paths_str=effective_target_paths_str,
-            project_root_str=resolved_project_root_path_str, # Pass the server's mandatory root
+            project_root_str=resolved_project_root_path_str, # Pass the translated, validated root
             override_rules=rules,
             list_only=list_only,
             size_limit_mb=size_limit_mb,
