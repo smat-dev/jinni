@@ -1,7 +1,9 @@
 name: Windows CI
 on:
-  push:   {branches: [main]}
-  pull_request: {branches: [main]}
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   build:
@@ -13,101 +15,112 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set-up Python 3.11
+    # ──────────────────────────────────────────
+    #  Python / deps
+    # ──────────────────────────────────────────
+    - name: Set‑up Python 3.11
       uses: actions/setup-python@v5
       with:
         python-version: "3.11"
 
-    # ────────────────────────────────────────────
-    #  Create & populate the venv with uv + dev-deps
-    # ────────────────────────────────────────────
     - name: Install deps with uv
       shell: pwsh
       run: |
         python -m pip install --upgrade pip
         pip install uv
-        uv venv $env:VENV_DIR          # creates the venv
-        & $env:VENV_BIN\Activate.ps1   # enters the venv
-        uv pip install -e .[dev]       # installs proj + pytest, pathspec, etc.
+        uv venv $env:VENV_DIR
+        & $env:VENV_BIN\Activate.ps1
+        uv pip install -e .[dev]
 
-    # ────────────────────────────────────────────
-    #  Run unit tests on host Windows
-    # ────────────────────────────────────────────
+    # ──────────────────────────────────────────
+    #  Unit tests on host Windows
+    # ──────────────────────────────────────────
     - name: Run pytest (host)
       shell: pwsh
       run: |
         & $env:VENV_BIN\Activate.ps1
         pytest -v
 
-    # ────────────────────────────────────────────
-    #  Provision WSL 2 (Ubuntu 22.04) once & keep
-    # ────────────────────────────────────────────
-    - name: Enable WSL (Ubuntu 22.04)
-      uses: Vampire/setup-wsl@v5   # installs kernel if missing & updates it
+    # ──────────────────────────────────────────
+    #  Provision WSL (Ubuntu 22.04)
+    # ──────────────────────────────────────────
+    - name: Enable WSL (Ubuntu 22.04)
+      uses: Vampire/setup-wsl@v5
       with:
-        distribution: Ubuntu-22.04
+        distribution: Ubuntu-22.04   # pre‑installed on GH runners
 
-    # ────────────────────────────────────────────
-    #  Create a tiny project inside WSL we can read
-    # ────────────────────────────────────────────
+    # ──────────────────────────────────────────
+    #  Create a tiny project inside WSL
+    # ──────────────────────────────────────────
     - name: Create sample project in WSL
       shell: pwsh
       run: |
         wsl bash -c 'mkdir -p /home/runner/testproj && echo hi > /home/runner/testproj/hello.txt'
 
+    # ──────────────────────────────────────────
+    #  Start WSL & warm‑up the \\wsl$ UNC share
+    # ──────────────────────────────────────────
     - name: Start WSL & warm‑up UNC share
       shell: pwsh
       run: |
-        $ErrorActionPreference = 'Continue'     # keep going on any individual error
+        $ErrorActionPreference = 'Continue'   # keep the build going even if UNC warm‑up fails
 
-        # ── Pick the first listed distro ────────────────────────────────
-        $distro = (wsl -l -q | Select-Object -First 1).Trim()
+        # helper: first listed distro, with NULs stripped
+        $distro = wsl -l -q |
+                  ForEach-Object { ($_ -replace "`0",'').Trim() } |
+                  Select-Object -First 1
+
         if (-not $distro) {
           Write-Host "No WSL distro found – skipping warm‑up"
           exit 0
         }
 
-        # ── 1) Boot the distro (returns immediately if already running) ─
         Write-Host "Starting WSL distro $distro …"
         wsl -d $distro -e sh -c 'true'
 
-        # ── 2) UNC warm‑up (non‑fatal) ──────────────────────────────────
         $unc = "\\\\wsl$\\$distro\\home\\runner\\testproj"
         Write-Host "Warming up UNC path $unc"
 
-        # Try once.  If the share isn't ready yet, wait ≤3 s in 300 ms steps.
-        $maxTries = 20
-        for ($i = 0; $i -lt $maxTries; $i++) {
-          if (Test-Path -LiteralPath $unc) {
-            Write-Host "UNC is available."
-            break
-          }
+        $tries = 0
+        while (-not (Test-Path -LiteralPath $unc) -and $tries -lt 20) {
           Start-Sleep -Milliseconds 300
-        }
-        if (-not (Test-Path -LiteralPath $unc)) {
-          Write-Host "UNC still not available after $($maxTries*300) ms – continuing anyway"
+          $tries++
         }
 
-    # ────────────────────────────────────────────
-    #  Smoke-tests jinni path translation from Windows
-    # ────────────────────────────────────────────
-    - name: Smoke test vscode-remote URI
+        if (-not (Test-Path -LiteralPath $unc)) {
+          Write-Host "UNC still not available after $($tries*300) ms – continuing anyway"
+        } else {
+          Write-Host "UNC is available."
+        }
+
+    # ──────────────────────────────────────────
+    #  Smoke‑tests jinni path translation
+    # ──────────────────────────────────────────
+    - name: Smoke test vscode‑remote URI
       shell: pwsh
       run: |
-        $distro = (wsl -l -q | Select-Object -First 1).Trim()
+        $distro = wsl -l -q |
+                  ForEach-Object { ($_ -replace "`0",'').Trim() } |
+                  Select-Object -First 1
         if (-not $distro) { throw "Could not determine WSL distro name." }
+
         $uri = "vscode-remote://wsl+$distro/home/runner/testproj"
         Write-Host "Testing URI: $uri"
+
         & $env:VENV_BIN\Activate.ps1
         & $env:VENV_BIN\jinni.exe --list-only $uri | Select-String 'hello.txt'
 
     - name: Smoke test POSIX path
       shell: pwsh
       run: |
-        $distro = (wsl -l -q | Select-Object -First 1).Trim()
+        $distro = wsl -l -q |
+                  ForEach-Object { ($_ -replace "`0",'').Trim() } |
+                  Select-Object -First 1
         if (-not $distro) { throw "Could not determine WSL distro name." }
+
         Write-Host "Assuming WSL distro for POSIX path test: $distro"
+
         & $env:VENV_BIN\Activate.ps1
-        $env:JINNI_ASSUME_WSL_DISTRO=$distro
-        & $env:VENV_BIN\jinni.exe --list-only '/home/runner/testproj' | Select-String 'hello.txt'
-        $env:JINNI_ASSUME_WSL_DISTRO='' # Clear env var
+        $env:JINNI_ASSUME_WSL_DISTRO = $distro
+        & $env:VENV_BIN\jinni.exe --list-only '/home/runner/testproj' |
+          Select-String 'hello.txt'
