@@ -153,13 +153,18 @@ This will make the `jinni` CLI command available in your environment. See the "R
 
 ### Windows + WSL
 Jinni v0.1.7+ auto-converts WSL paths.  
-  
+
 Provide either of these as `project_root` (CLI `--root` or MCP argument):
 ```bash
 /home/user/project
 vscode-remote://wsl+Ubuntu-22.04/home/user/project
-```  
+```
 No wrappers, mounts, or extra flags required—Jinni resolves the UNC path (`\\wsl$\...`) on Windows automatically.
+
+- **UNC Path Format:** Jinni always uses `\\wsl$\<distro>\...` for maximum compatibility with all Windows versions supporting WSL.
+- **Distro Name Handling:** Spaces and most special characters are allowed in the distro name. Only truly illegal UNC characters are replaced with `_`.
+- **Caching:** WSL path lookups and conversions are cached for performance. If you install WSL while Jinni is running, restart Jinni to pick up the new `wslpath`.
+- **Opt-out:** Set the environment variable `JINNI_NO_WSL_TRANSLATE=1` to disable all WSL path translation logic.
 
 Only `wsl+<distro>` URIs and absolute POSIX paths (starting with `/`) are translated; for SSH or container remotes, run Jinni inside that environment.
 

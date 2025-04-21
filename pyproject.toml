@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jinni"
-version = "0.1.7"
+version = "0.1.8"
 description = "A tool to help LLMs efficiently read and understand project context."
 readme = "README.md"
 requires-python = ">=3.10" # Minimum Python version required by dependencies (e.g., mcp)
