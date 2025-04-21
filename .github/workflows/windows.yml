@@ -21,12 +21,11 @@ jobs:
       run: |
         pip install uv
         uv venv .venv
-        .\.venv\Scripts\activate
-        uv pip install -e .
-        uv pip install pytest # Add pytest installation
+        .\\.venv\\Scripts\\uv pip install -e .
+        .\\.venv\\Scripts\\uv pip install pytest pytest-asyncio # Add pytest installation
 
     - name: Run tests
-      run: pytest -v                # pure Windows tests
+      run: .\\.venv\\Scripts\\pytest -v                # pure Windows tests
 
     # --- WSL Smoke Test Setup & Execution ---
     - name: Enable WSL + Ubuntu
@@ -34,12 +33,21 @@ jobs:
         wsl --install -d Ubuntu --no-launch
         wsl -d Ubuntu -u root -- echo "WSL Enabled"
 
-    - name: Create test directory and file inside WSL
+    - name: Create sample project in WSL
       run: |
-        wsl -d Ubuntu -- mkdir -p /home/runner/testproj
-        wsl -d Ubuntu -- bash -c "echo 'WSL Test Content' > /home/runner/testproj/hello.txt"
-        wsl -d Ubuntu -- ls -l /home/runner/testproj # Verify file creation
+        wsl bash -c 'mkdir -p /home/runner/testproj && echo "hello" > /home/runner/testproj/hello.txt'
 
     - name: Smoke test vscode-remote URI
       run: |
-        uvx jinni --list-only vscode-remote://wsl+Ubuntu/home/runner/testproj 
+        echo "Testing vscode-remote URI..."
+        .\\.venv\\Scripts\\jinni --list-only vscode-remote://wsl+Ubuntu/home/runner/testproj | findstr hello.txt
+
+    - name: Smoke test POSIX path
+      run: |
+        echo "Testing POSIX path..."
+        .\\.venv\\Scripts\\jinni --list-only /home/runner/testproj | findstr hello.txt
+
+    - name: Smoke test translated UNC path (should not re-translate)
+      run: |
+        echo "Testing already translated UNC path..."
+        .\\.venv\\Scripts\\jinni --list-only '\\\\wsl$\\Ubuntu\\home\\runner\\testproj' | findstr hello.txt 
