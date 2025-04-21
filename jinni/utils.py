@@ -89,6 +89,36 @@ def _cached_wsl_to_unc(wslpath_executable: str, posix_path: str) -> Optional[str
         logger.warning(f"Unexpected error calling wslpath for '{posix_path}': {e}. Returning original path.")
         return None # Indicate failure
 
+@lru_cache(maxsize=1) # Cache the result of querying WSL
+def _get_default_wsl_distro() -> Optional[str]:
+    """Gets the default WSL distribution name by running `wsl -l -q`."""
+    try:
+        # Run 'wsl -l -q' which lists distros quietly (only names)
+        # The default distro might not always be first, but this is a common assumption.
+        # A more robust method might involve parsing 'wsl -l --running' or config.
+        # For now, assume the first listed is a usable one if present.
+        out = subprocess.check_output(["wsl", "-l", "-q"], text=True, timeout=3, stderr=subprocess.DEVNULL)
+        lines = out.splitlines()
+        if lines:
+            first_distro = lines[0].strip()
+            logger.debug(f"Found potential WSL default/first distro: '{first_distro}'")
+            return first_distro
+        else:
+            logger.debug("'wsl -l -q' ran but produced no output (no distros?).")
+            return None
+    except FileNotFoundError:
+        logger.debug("'wsl' command not found. Cannot determine default distro.")
+        return None
+    except subprocess.TimeoutExpired:
+        logger.warning("Timeout running 'wsl -l -q'. Cannot determine default distro.")
+        return None
+    except subprocess.CalledProcessError as e:
+        # Log as debug because this often means no distros installed or WSL not fully enabled.
+        logger.debug(f"Command 'wsl -l -q' failed (return code {e.returncode}). Cannot determine default distro.")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error running 'wsl -l -q': {e}")
+        return None
 
 # --- Constants moved temporarily or redefined ---
 # These might belong in a dedicated constants module later
@@ -412,6 +442,12 @@ def _translate_wsl_path(path_str: str) -> str:
     parsed = urlparse(path_str)
     logger.debug(f"Parsing path/URI '{path_str}': scheme='{parsed.scheme}', netloc='{parsed.netloc}', path='{parsed.path}'")
 
+    # --- Empty Distro Name Check (for relevant schemes) ---
+    if parsed.scheme == "vscode-remote" and parsed.netloc.lower().startswith("wsl+") and not parsed.netloc[4:]:
+        raise ValueError("missing distro name in WSL URI")
+    # Note: wsl.localhost format check happens inside the block below
+    # Note: alternate vscode:// format check happens inside the block below
+
     # 1) Handle vscode-remote:// URIs
     if parsed.scheme == "vscode-remote":
         netloc_decoded = unquote(parsed.netloc)
@@ -420,18 +456,30 @@ def _translate_wsl_path(path_str: str) -> str:
         uri_type: Optional[str] = None # Initialize uri_type
 
         if netloc_decoded.lower().startswith("wsl+"):
+            # Distro check already performed above
             distro = netloc_decoded[len("wsl+"):]
             linux_path = unquote(parsed.path)
             uri_type = "wsl+"
         elif netloc_decoded.lower() == "wsl.localhost":
-            path_parts = parsed.path.strip("/").split("/", 1)
-            if len(path_parts) >= 1:
+            # Path should be /<distro>/<actual_path>
+            # Reject paths starting with // immediately as they lack a distro
+            if parsed.path.startswith("//"):
+                logger.warning(f"Invalid wsl.localhost URI path (starts with //): '{parsed.path}'")
+                raise ValueError("missing distro name in wsl.localhost URI path")
+            # Need at least two parts after stripping leading /
+            path_parts = parsed.path.lstrip("/").split("/", 1)
+            if len(path_parts) == 2 and path_parts[0]: # Check we have exactly two parts and distro is non-empty
                 distro = path_parts[0]
-                linux_path = "/" + unquote(path_parts[1]) if len(path_parts) > 1 else "/"
+                linux_path = "/" + unquote(path_parts[1]) # Path part can be empty, becomes "/"
+                uri_type = "wsl.localhost"
+            elif len(path_parts) == 1 and path_parts[0]: # Handle case like /DistroName
+                distro = path_parts[0]
+                linux_path = "/" # No path part means root
                 uri_type = "wsl.localhost"
             else:
-                logger.warning(f"Could not extract distro from wsl.localhost URI path: '{parsed.path}'. Returning original.")
-                return path_str # Malformed wsl.localhost
+                # Malformed wsl.localhost (missing distro or wrong format)
+                logger.warning(f"Could not extract valid distro/path from wsl.localhost URI path: '{parsed.path}'")
+                raise ValueError("missing or invalid distro/path in wsl.localhost URI path")
 
         # Build UNC if distro and path were found
         if distro and linux_path is not None:
@@ -439,9 +487,6 @@ def _translate_wsl_path(path_str: str) -> str:
             windows_unc_path = _build_unc_path(distro, linux_path)
             logger.debug(f"Translated vscode-remote URI '{path_str}' to UNC: '{windows_unc_path}'")
             return windows_unc_path
-        elif distro is None and uri_type == "wsl+": # Handle case wsl+ but no distro found
-            logger.warning(f"WSL URI '{path_str}' did not yield a valid distro name. Returning original.")
-            return path_str
         # If it was vscode-remote scheme but not wsl+ or wsl.localhost (e.g., ssh-remote), fall through to return original
 
     # 2) Handle vscode://vscode-remote/wsl+Distro/path
@@ -450,15 +495,14 @@ def _translate_wsl_path(path_str: str) -> str:
         if len(path_parts) >= 1 and path_parts[0].lower().startswith("wsl+"):
             authority = path_parts[0]
             distro = authority[len("wsl+"):]
-            if distro:
-                linux_path = "/" + unquote(path_parts[1]) if len(path_parts) > 1 else "/"
-                logger.debug(f"Extracted distro='{distro}', linux_path='{linux_path}' from alternate vscode URI.")
-                windows_unc_path = _build_unc_path(distro, linux_path)
-                logger.debug(f"Translated alternate vscode URI '{path_str}' to UNC: '{windows_unc_path}'")
-                return windows_unc_path
-            else:
-                logger.warning(f"Alternate WSL URI authority '{authority}' is missing distro name. Returning original path: '{path_str}'")
-                return path_str
+            if not distro:
+                # Malformed alternate vscode uri (missing distro)
+                raise ValueError("missing distro name in alternate vscode URI authority")
+            linux_path = "/" + unquote(path_parts[1]) if len(path_parts) > 1 else "/"
+            logger.debug(f"Extracted distro='{distro}', linux_path='{linux_path}' from alternate vscode URI.")
+            windows_unc_path = _build_unc_path(distro, linux_path)
+            logger.debug(f"Translated alternate vscode URI '{path_str}' to UNC: '{windows_unc_path}'")
+            return windows_unc_path
         # If not wsl+ authority, fall through
 
     # 3) Handle pure POSIX path /path/to/file
@@ -467,13 +511,56 @@ def _translate_wsl_path(path_str: str) -> str:
         if wslpath_exe:
             win_path = _cached_wsl_to_unc(wslpath_exe, path_str)
             if win_path:
+                logger.debug(f"Translated POSIX path '{path_str}' using wslpath.")
                 return win_path # Return translated UNC path
             else:
-                # wslpath call failed, _cached_wsl_to_unc logged it
-                return path_str # Return original POSIX path
+                # wslpath call failed, _cached_wsl_to_unc logged it.
+                # Continue to manual fallback.
+                logger.debug(f"wslpath call failed for '{path_str}'. Attempting manual fallback.")
         else:
-             logger.debug("wslpath executable not found, cannot translate POSIX path. Returning original.")
-             return path_str # Return original POSIX path
+             logger.debug("wslpath executable not found. Attempting manual fallback.")
+
+        # --- Manual Fallback (wslpath failed or not found) ---
+        # Try env var first
+        assumed_distro = os.environ.get("JINNI_ASSUME_WSL_DISTRO")
+        distro_source = "environment variable JINNI_ASSUME_WSL_DISTRO"
+
+        # If no env var, try getting default distro
+        if not assumed_distro:
+            assumed_distro = _get_default_wsl_distro() # Calls 'wsl -l -q'
+            distro_source = "'wsl -l -q' output"
+
+        if assumed_distro:
+            logger.debug(f"Using assumed WSL distro '{assumed_distro}' from {distro_source} for manual UNC path construction.")
+            candidate_unc_path = _build_unc_path(assumed_distro, path_str)
+            logger.debug(f"Checking existence of manually constructed path: {candidate_unc_path}")
+            try:
+                 # Check if the constructed path exists (important step!)
+                 # Use pathlib for potentially easier existence check on UNC
+                 if Path(candidate_unc_path).exists():
+                     logger.debug(f"Manually constructed UNC path exists. Returning: {candidate_unc_path}")
+                     return candidate_unc_path
+                 else:
+                     # Catch potential errors during Path(unc).exists()
+                     # These are likely permission issues or unexpected FS states, log as debug.
+                     logger.debug(f"Error checking existence of manually constructed UNC path {candidate_unc_path}: {e_exists}")
+                     # Fall through to raise RuntimeError
+            except Exception as e_exists:
+                 # Catch potential errors during Path(unc).exists()
+                 # These are likely permission issues or unexpected FS states, log as debug.
+                 logger.debug(f"Error checking existence of manually constructed UNC path {candidate_unc_path}: {e_exists}")
+                 # Fall through to raise RuntimeError
+        else:
+            logger.debug("Could not determine a WSL distro from env var or 'wsl -l -q'. Cannot construct manual UNC path.")
+
+            # If manual fallback failed (no distro or path doesn't exist)
+            # Truncate potentially long path in error message
+            truncated_path = path_str[:50] + '...' if len(path_str) > 53 else path_str
+            raise RuntimeError(
+                f"Cannot map POSIX path starting with '{truncated_path}' to Windows. WSL may not be available or path is invalid within the default/assumed distro. "
+                f"Ensure WSL is installed and functional, or run Jinni inside the WSL distro. "
+                f"You can also set JINNI_ASSUME_WSL_DISTRO if the default distro is incorrect."
+            )
 
     # 4) No translation needed or possible (Windows path, other URI scheme, etc.)
     logger.debug(f"Path '{path_str}' did not match WSL translation conditions on Windows. Returning original.")
@@ -484,37 +571,63 @@ def _translate_wsl_path(path_str: str) -> str:
 # ───────────────────────────────────────────────────────────────
 def _strip_wsl_uri_to_posix(uri: str) -> Optional[str]:
     """
-    If *uri* is a vscode‑remote WSL URI, return the embedded POSIX path
-    (`/home/…`).  Otherwise return ``None``.
-    Works even when the '+’ is percent‑encoded.
-    Handles `wsl+` style for both `vscode-remote:` and `vscode:` schemes.
-    Does NOT handle `wsl.localhost` style for stripping.
+    If *uri* is a VS Code WSL URI (`vscode-remote:` or `vscode:` scheme),
+    return the embedded POSIX path (`/home/...`). Otherwise return ``None``.
+    Works even when the '+' is percent-encoded.
+    Handles `wsl+<Distro>` style for both schemes.
+    Handles `wsl.localhost/<Distro>` style for `vscode-remote:` scheme.
     """
     try:
         p = urlparse(uri)
         logger.debug(f"[_strip_wsl_uri_to_posix] Parsed URI: scheme='{p.scheme}', netloc='{p.netloc}', path='{p.path}'")
 
         # vscode-remote://wsl+Ubuntu/home/you
+        # vscode-remote://wsl.localhost/Ubuntu/home/you
         if p.scheme == "vscode-remote":
             netloc_dec = unquote(p.netloc)
-            logger.debug(f"[_strip_wsl_uri_to_posix] vscode-remote: netloc_dec='{''.join(c if ' ' <= c <= '~' else repr(c) for c in netloc_dec)}'") # Log safely
-            # Make check case-insensitive
+            # logger.debug(f"[_strip_wsl_uri_to_posix] vscode-remote: netloc_dec='{''.join(c if ' ' <= c <= '~' else repr(c) for c in netloc_dec)}'") # Log safely
+
+            # Handle wsl+
             if netloc_dec.lower().startswith("wsl+"):
+                # Check for missing distro name after wsl+
+                if not netloc_dec[4:]:
+                    logger.debug("[_strip_wsl_uri_to_posix] Matched vscode-remote wsl+ but missing distro name.")
+                    return None # Or raise? For stripping, None is safer.
                 result = unquote(p.path) or "/"
                 logger.debug(f"[_strip_wsl_uri_to_posix] Matched vscode-remote wsl+. Returning: '{result}'")
                 return result
 
+            # Handle wsl.localhost
+            elif netloc_dec.lower() == "wsl.localhost":
+                # Path must be /<distro>/<path_part> or /<distro>
+                if not p.path.startswith("/") or p.path.startswith("//"):
+                    logger.debug(f"[_strip_wsl_uri_to_posix] Matched vscode-remote wsl.localhost but path format invalid: '{p.path}'")
+                    return None # Invalid path format
+
+                parts = p.path.lstrip("/").split("/", 1)
+                # Ensure we have at least a non-empty distro part
+                if len(parts) >= 1 and parts[0]:
+                    # If only distro, path is "/". If path part exists, use it.
+                    posix_path = "/" + unquote(parts[1]) if len(parts) > 1 and parts[1] else "/"
+                    logger.debug(f"[_strip_wsl_uri_to_posix] Matched vscode-remote wsl.localhost. Returning: '{posix_path}'")
+                    return posix_path
+                else:
+                    logger.debug("[_strip_wsl_uri_to_posix] Matched vscode-remote wsl.localhost but no distro found in path.")
+                    return None # Missing distro in path
+
         # vscode://vscode-remote/wsl+Ubuntu/home/you
         if p.scheme == "vscode" and p.netloc == "vscode-remote":
-            logger.debug(f"[_strip_wsl_uri_to_posix] vscode: path='{p.path}'")
+            # logger.debug(f"[_strip_wsl_uri_to_posix] vscode: path='{p.path}'")
             parts = p.path.lstrip("/").split("/", 1)
-            # Make check case-insensitive
-            if parts and parts[0].lower().startswith("wsl+"):
+            # Check authority part starts with wsl+ and has a distro name
+            if parts and parts[0].lower().startswith("wsl+") and parts[0][4:]:
                 result = "/" + unquote(parts[1]) if len(parts) > 1 else "/"
                 logger.debug(f"[_strip_wsl_uri_to_posix] Matched vscode wsl+. Returning: '{result}'")
                 return result
+            else:
+                logger.debug("[_strip_wsl_uri_to_posix] Matched vscode scheme but not valid wsl+ format.")
 
-        logger.debug(f"[_strip_wsl_uri_to_posix] No match found. Returning None.")
+        # logger.debug(f"[_strip_wsl_uri_to_posix] No matching WSL URI format found. Returning None.")
         return None
     except Exception as e:
         logger.error(f"[_strip_wsl_uri_to_posix] Error processing URI '{uri}': {e}", exc_info=True)

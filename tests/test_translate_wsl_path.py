@@ -5,7 +5,7 @@ import subprocess
 import shutil
 from urllib.parse import urlparse, ParseResult, quote # Added quote
 from typing import Optional # Added Optional
-from jinni.utils import _translate_wsl_path, _find_wslpath, _cached_wsl_to_unc # Import new helpers
+from jinni.utils import _translate_wsl_path, _find_wslpath, _cached_wsl_to_unc, _get_default_wsl_distro # Import new helpers
 from functools import lru_cache # Import lru_cache
 import platform as real_platform
 
@@ -60,17 +60,33 @@ def test_translate_windows_path_no_change(monkeypatch):
     assert _translate_wsl_path(win_path) == win_path
 
 def test_translate_posix_path_wslpath_not_found(monkeypatch):
-    """Test POSIX path translation when wslpath is not found."""
+    """Test POSIX path translation when wslpath is not found (should raise RuntimeError)."""
     monkeypatch.setattr(platform, "system", mock_platform_system("Windows"))
     monkeypatch.setattr("jinni.utils._find_wslpath", mock_find_wslpath(None)) # Mock find failure
-    assert _translate_wsl_path("/home/user/project") == "/home/user/project"
+    monkeypatch.setattr("jinni.utils._get_default_wsl_distro", lambda: None) # Mock no default distro
+    monkeypatch.delenv("JINNI_ASSUME_WSL_DISTRO", raising=False) # Mock no env var
+    # Mock Path.exists to always return False
+    class MockPathFalse:
+        def __init__(self, path_str): pass
+        def exists(self): return False
+    monkeypatch.setattr("jinni.utils.Path", MockPathFalse)
+    with pytest.raises(RuntimeError, match="Cannot map POSIX path"):
+        _translate_wsl_path("/home/user/project")
 
 def test_translate_posix_path_wslpath_error(monkeypatch):
-    """Test POSIX path translation when wslpath command fails."""
+    """Test POSIX path translation when wslpath command fails (should raise RuntimeError)."""
     monkeypatch.setattr(platform, "system", mock_platform_system("Windows"))
     monkeypatch.setattr("jinni.utils._find_wslpath", mock_find_wslpath("/fake/wslpath"))
-    monkeypatch.setattr("jinni.utils._cached_wsl_to_unc", mock_cached_wsl_to_unc(None)) # Mock cache failure
-    assert _translate_wsl_path("/home/user/project") == "/home/user/project"
+    monkeypatch.setattr("jinni.utils._cached_wsl_to_unc", mock_cached_wsl_to_unc(None)) # Mock wslpath call failure
+    monkeypatch.setattr("jinni.utils._get_default_wsl_distro", lambda: None) # Mock no default distro
+    monkeypatch.delenv("JINNI_ASSUME_WSL_DISTRO", raising=False) # Mock no env var
+    # Mock Path.exists to always return False
+    class MockPathFalse:
+        def __init__(self, path_str): pass
+        def exists(self): return False
+    monkeypatch.setattr("jinni.utils.Path", MockPathFalse)
+    with pytest.raises(RuntimeError, match="Cannot map POSIX path"):
+        _translate_wsl_path("/home/user/project")
 
 def test_translate_vscode_non_wsl_uri_no_change(monkeypatch):
     """Test a non-WSL vscode-remote URI is not translated."""
@@ -191,11 +207,14 @@ def test_translate_percent_encoded_plus_uri_on_linux(monkeypatch):
         # Now expects stripping on non-Windows
         ("vscode-remote://wsl+Ubuntu/home/alice/app", "macOS", None, None, "/home/alice/app", None),
         # wsl.localhost URIs are *not* stripped by the helper, so expect original path
-        ("vscode-remote://wsl.localhost/Debian/tmp", "Linux", None, None, "vscode-remote://wsl.localhost/Debian/tmp", None),
+        ("vscode-remote://wsl.localhost/Debian/tmp", "Linux", None, None, "/tmp", None),
 
-        # --- wslpath unavailable/error (Should Not Translate POSIX) ---
-        ("/home/alice/app", "Windows", None, None, "/home/alice/app", None), # wslpath not found
-        ("/home/alice/app", "Windows", "/fake/wslpath", None, "/home/alice/app", None), # wslpath call fails (mocked via mock_cached_wsl_ret=None)
+        # --- wslpath unavailable/error (Should Not Translate POSIX without fallback) ---
+        ("/home/alice/app", "Windows", None, None, "/home/alice/app", None), # wslpath not found - Fallback will raise error if WSL/distro not found
+        ("/home/alice/app", "Windows", "/fake/wslpath", None, "/home/alice/app", None), # wslpath call fails - Fallback will raise error if WSL/distro not found
+
+        # --- Fallback via JINNI_ASSUME_WSL_DISTRO ---
+        ("/home/alice/app", "Windows", None, None, r"\\wsl$\TestDistro\home\alice\app", {"JINNI_ASSUME_WSL_DISTRO": "TestDistro"}), # wslpath not found, uses env var
 
         # --- Env Var Disables (Should Not Translate) ---
         ("/home/alice/app", "Windows", "/fake/wslpath", r"\\wsl$\Ubuntu\home\alice\app", "/home/alice/app", {"JINNI_NO_WSL_TRANSLATE": "1"}),
@@ -210,22 +229,24 @@ def test_translate_percent_encoded_plus_uri_on_linux(monkeypatch):
         "distro_with_spaces_wsl_localhost",
         "path_with_encoded_spaces",
         "vscode_alt_uri_no_path_to_unc_root",
-        "malformed_uri_wsl_plus_empty_distro",
-        "malformed_uri_wsl_localhost_empty_distro",
+        "malformed_uri_wsl_plus_empty_distro_raises", # Updated expected behavior
+        "malformed_uri_wsl_localhost_empty_distro_raises", # Updated expected behavior
         "ssh_remote_uri_no_change",
         "unc_localhost_path_no_change",
         "unc_dollar_path_no_change",
         "windows_path_no_change",
         "posix_on_linux_no_change",
-        "vscode_remote_uri_on_macos_no_change",
-        "vscode_localhost_uri_on_linux_no_change",
-        "posix_wslpath_not_found_no_change",
-        "posix_wslpath_call_fails_no_change",
+        "vscode_remote_uri_on_macos_strips", # Updated expected behavior
+        "vscode_localhost_uri_on_linux_strips", # Updated expected behavior
+        "posix_wslpath_not_found_fallback_raises", # Updated expected behavior
+        "posix_wslpath_call_fails_fallback_raises", # Updated expected behavior
+        "fallback_via_env_var", # New test case
         "env_var_disables_posix",
         "env_var_disables_vscode_uri",
     ]
 )
 def test_translate_wsl_path_parametrized(
+    request,
     monkeypatch,
     input_path, mock_system, mock_find_wslpath_ret, mock_cached_wsl_ret, expected_output,
     env_vars
@@ -253,15 +274,40 @@ def test_translate_wsl_path_parametrized(
     # _find_wslpath.cache_clear()
     # _cached_wsl_to_unc.cache_clear()
 
-    result = _translate_wsl_path(input_path)
+    # --- Mock Path.exists() for fallback testing ---
+    # Only mock if we expect fallback to be potentially triggered
+    is_windows = mock_system.lower() == "windows"
+    is_posix_input = input_path.startswith("/") and not urlparse(input_path).scheme
+    should_mock_exists = is_windows and is_posix_input and not mock_find_wslpath_ret
 
-    is_real_windows = real_platform.system().lower() == "windows"
+    class MockPath:
+        def __init__(self, path_str):
+            self._path_str = path_str
+        def exists(self):
+            # Simulate existence only for the expected fallback path
+            expected_fallback_unc = r"\\wsl$\TestDistro\home\alice\app"
+            # print(f"MockPath checking exists for: {self._path_str} against {expected_fallback_unc}") # Debug print
+            return self._path_str == expected_fallback_unc
 
-    # If the test expects Windows translation but we're not on Windows, skip before any assertion
-    if should_translate and not is_real_windows:
-        pytest.skip("WSL path translation tests are only valid on Windows platforms.")
+    if should_mock_exists:
+        monkeypatch.setattr("jinni.utils.Path", MockPath)
 
-    assert result == expected_output
+    # Mock _get_default_wsl_distro to return None unless specifically testing it
+    # (Parametrized tests don't cover this branch yet, added separate test below)
+    monkeypatch.setattr("jinni.utils._get_default_wsl_distro", lambda: None)
+
+    # --- Handle Expected Exceptions --- 
+    # Use request.node.callspec.id to get the current test case ID
+    current_test_id = request.node.callspec.id
+    if "raises" in current_test_id:
+        # Determine expected exception type based on ID
+        expected_exception = ValueError if "malformed" in current_test_id else RuntimeError
+        with pytest.raises(expected_exception):
+            _translate_wsl_path(input_path)
+    else:
+        # Only call this if no exception is expected
+        result = _translate_wsl_path(input_path)
+        assert result == expected_output
 
     is_posix_path = input_path.startswith("/") and not urlparse(input_path).scheme
 
@@ -277,3 +323,41 @@ def test_translate_wsl_path_parametrized(
     #     cached_unc_info = _cached_wsl_to_unc.cache_info()
     #     assert cached_unc_info.misses == 0, f"_cached_wsl_to_unc misses check failed (non-translate) ({cached_unc_info=})"
     #     assert cached_unc_info.hits == 0, f"_cached_wsl_to_unc hits check failed (non-translate) ({cached_unc_info=})" 
+
+# --- New Specific Test Cases ---
+
+def test_strip_wsl_localhost_uri_on_linux(monkeypatch):
+    """Test vscode-remote wsl.localhost URI is stripped on Linux."""
+    monkeypatch.setattr(platform, "system", mock_platform_system("Linux"))
+    uri = "vscode-remote://wsl.localhost/Debian/tmp/my project"
+    expected_stripped_path = "/tmp/my project"
+    assert _translate_wsl_path(uri) == expected_stripped_path
+
+def test_fallback_runtime_error(monkeypatch):
+    """Test RuntimeError is raised on Windows when no wslpath and no fallback works."""
+    monkeypatch.setattr(platform, "system", mock_platform_system("Windows"))
+    monkeypatch.setattr("jinni.utils._find_wslpath", mock_find_wslpath(None)) # No wslpath
+    monkeypatch.setattr("jinni.utils._get_default_wsl_distro", lambda: None) # No default distro
+    monkeypatch.delenv("JINNI_ASSUME_WSL_DISTRO", raising=False) # No env var
+
+    # Mock Path.exists to always return False for the fallback check
+    class MockPathFalse:
+        def __init__(self, path_str): pass
+        def exists(self): return False
+    monkeypatch.setattr("jinni.utils.Path", MockPathFalse)
+
+    with pytest.raises(RuntimeError, match="Cannot map POSIX path"):
+        _translate_wsl_path("/home/user/some/path")
+
+def test_malformed_uri_value_error(monkeypatch):
+    """Test ValueError is raised for malformed URIs with missing distros."""
+    monkeypatch.setattr(platform, "system", mock_platform_system("Windows"))
+    # Test vscode-remote://wsl+
+    with pytest.raises(ValueError, match="missing distro name in WSL URI"):
+        _translate_wsl_path("vscode-remote://wsl+/home/user")
+    # Test vscode-remote://wsl.localhost/
+    with pytest.raises(ValueError, match="missing distro name in wsl.localhost URI path"):
+        _translate_wsl_path("vscode-remote://wsl.localhost//home/user")
+    # Test vscode://vscode-remote/wsl+
+    with pytest.raises(ValueError, match="missing distro name in alternate vscode URI authority"):
+        _translate_wsl_path("vscode://vscode-remote/wsl+/home/user") 

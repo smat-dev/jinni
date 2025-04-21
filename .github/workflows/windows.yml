@@ -55,14 +55,26 @@ jobs:
       run: |
         wsl bash -c 'mkdir -p /home/runner/testproj && echo hi > /home/runner/testproj/hello.txt'
 
+    # Warm up WSL path provider (may help Path.exists() on \\wsl$)
+    - name: Warm-up WSL path
+      shell: cmd # Use cmd for simple dir command
+      run: |
+         dir \\wsl$\Ubuntu-22.04\home\runner\testproj\ > nul
+
     # ────────────────────────────────────────────
     #  Smoke-tests jinni path translation from Windows
     # ────────────────────────────────────────────
+    - name: Smoke test vscode-remote URI
+      shell: pwsh
+      run: |
+        & $env:VENV_BIN\Activate.ps1
+        & $env:VENV_BIN\jinni.exe --list-only `
+          'vscode-remote://wsl+Ubuntu-22.04/home/runner/testproj' |
+          Select-String 'hello.txt'
+
     - name: Smoke test POSIX path
       shell: pwsh
       run: |
         & $env:VENV_BIN\Activate.ps1
         & $env:VENV_BIN\jinni.exe --list-only '/home/runner/testproj' |
           Select-String 'hello.txt'
-
-# Removed the UNC path smoke test as Path.exists() often fails on \\wsl$ paths in CI 

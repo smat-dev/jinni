@@ -12,9 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Distro names are sanitized: only illegal UNC characters are replaced with `_`, spaces are allowed.
 - WSL path lookups and conversions are cached for performance.
 - New environment variable: `JINNI_NO_WSL_TRANSLATE=1` disables all WSL path translation logic.
+- Automatic fallback for WSL path translation on Windows when `wslpath` is unavailable. Jinni now attempts to determine the default distro using `wsl -l -q` and constructs the UNC path (`\\wsl$\...`) manually.
+- Environment variable `JINNI_ASSUME_WSL_DISTRO` allows overriding the automatically detected default distro for the manual fallback.
+- Added support for stripping `vscode-remote://wsl.localhost/Distro/...` URIs to `/...` on non-Windows platforms.
 
 ### Changed
 - If you install WSL while Jinni is running, restart Jinni to pick up the new `wslpath`.
+- WSL path translation (`_translate_wsl_path`) now raises `ValueError` for malformed WSL URIs missing a distribution name (e.g., `vscode-remote://wsl+/...`).
+- WSL path translation (`_translate_wsl_path`) now raises `RuntimeError` on Windows if a POSIX path is given but cannot be translated (e.g., `wslpath` fails and manual fallback also fails due to no WSL/distro found or constructed path not existing).
+
+### Fixed
+- (Include any bug fixes related to this change if applicable)
 
 ## [0.1.7] - YYYY-MM-DD
 ### Added
