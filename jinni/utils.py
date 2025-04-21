@@ -152,10 +152,14 @@ def _cached_wsl_to_unc(wslpath_executable: str, posix_path: str) -> str | None:
     if unc:
         return unc
 
-    # 3️⃣ If both failed we **do not cache** the negative result –
-    #    a later call might succeed once the share is up.
-    _cached_wsl_to_unc.cache_clear()          # purge the (None) entry
-    logger.debug(f"Both wslpath -u and -w failed to produce a verified UNC path for '{posix_path}'.")
+    # 3️⃣ Both flags failed.  Don't memoise the negative result – the \\wsl$
+    #    share may appear moments later.  Python 3.10 lacks cache_pop(), so we
+    #    just clear the tiny cache.
+    _cached_wsl_to_unc.cache_clear()
+    logger.debug(
+        "Both wslpath -u and -w failed to produce a verified UNC path for %r.",
+        posix_path,
+    )
     return None
 
 @lru_cache(maxsize=1) # Cache the result of querying WSL
@@ -602,17 +606,21 @@ def _translate_wsl_path(path_str: str) -> str:
             distro_source = "'wsl -l -q' output"
 
         if assumed_distro:
-            logger.debug(f"Using assumed WSL distro '{assumed_distro}' from {distro_source} for manual UNC path construction.")
+            logger.debug(
+                "Using assumed WSL distro %r from %s for manual UNC path construction.",
+                assumed_distro, distro_source,
+            )
             candidate_unc_path = _build_unc_path(assumed_distro, path_str)
 
-            # We just need to know the **share** is live; probing the final
-            # file is flaky on fresh files (9p latency).  Check the share root
-            # once, then return the path regardless.
+            # Probe only the share root; individual files may lag.
             share_root = Path(fr"\\wsl$\{assumed_distro}")
             if not share_root.exists():
-                logger.debug("UNC share root %s still not visible – continuing anyway", share_root)
+                logger.debug(
+                    "UNC share root %s still not visible – continuing anyway",
+                    share_root,
+                )
 
-            return candidate_unc_path   # let the caller decide; we're done
+            return candidate_unc_path   # return even if the root isn't up yet
         else:
             logger.debug("Could not determine a WSL distro from env var or 'wsl -l -q'. Cannot construct manual UNC path.")
             # Fall through to raise RuntimeError outside the 'if assumed_distro' block
