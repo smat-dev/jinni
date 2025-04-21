@@ -152,15 +152,16 @@ This will make the `jinni` CLI command available in your environment. See the "R
 ## Platform-specific notes
 
 ### Windows + WSL
-> Jinni v0.1.7+ auto-converts WSL paths.  
->   
-> • Provide either of these as `project_root` (CLI `--root` or MCP argument):
-> ```bash
-> /home/you/project
-> vscode-remote://wsl+Ubuntu-22.04/home/you/project
-> ```  
-> • No wrappers, mounts, or extra flags required—Jinni resolves the UNC path (`\\wsl$\...`) on Windows automatically.
-> • Only `wsl+<distro>` URIs and absolute POSIX paths (starting with `/`) are translated; for SSH or container remotes, run Jinni inside that environment.
+Jinni v0.1.7+ auto-converts WSL paths.  
+  
+Provide either of these as `project_root` (CLI `--root` or MCP argument):
+```bash
+/home/user/project
+vscode-remote://wsl+Ubuntu-22.04/home/user/project
+```  
+No wrappers, mounts, or extra flags required—Jinni resolves the UNC path (`\\wsl$\...`) on Windows automatically.
+
+Only `wsl+<distro>` URIs and absolute POSIX paths (starting with `/`) are translated; for SSH or container remotes, run Jinni inside that environment.
 
 ## Examples
 
