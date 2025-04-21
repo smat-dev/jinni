@@ -55,17 +55,37 @@ jobs:
       run: |
         wsl bash -c 'mkdir -p /home/runner/testproj && echo hi > /home/runner/testproj/hello.txt'
 
-    - name: Warm-up WSL UNC share
+    - name: Start WSL & warm‑up UNC share
       shell: pwsh
       run: |
+        $ErrorActionPreference = 'Continue'     # keep going on any individual error
+
+        # ── Pick the first listed distro ────────────────────────────────
         $distro = (wsl -l -q | Select-Object -First 1).Trim()
-        if ($distro) {
-          $unc = "\\\\wsl$\\$distro\\home\\runner\\testproj"
-          Write-Host "Warming up $unc"
-          # Try accessing the path, ignore errors if it fails (it might not be ready yet)
-          cmd /c "dir $unc > nul 2>&1" || echo "UNC not yet available; continuing anyway"
-        } else {
-          Write-Host "No WSL distro found – skipping warm-up"
+        if (-not $distro) {
+          Write-Host "No WSL distro found – skipping warm‑up"
+          exit 0
+        }
+
+        # ── 1) Boot the distro (returns immediately if already running) ─
+        Write-Host "Starting WSL distro $distro …"
+        wsl -d $distro -e sh -c 'true'
+
+        # ── 2) UNC warm‑up (non‑fatal) ──────────────────────────────────
+        $unc = "\\\\wsl$\\$distro\\home\\runner\\testproj"
+        Write-Host "Warming up UNC path $unc"
+
+        # Try once.  If the share isn't ready yet, wait ≤3 s in 300 ms steps.
+        $maxTries = 20
+        for ($i = 0; $i -lt $maxTries; $i++) {
+          if (Test-Path -LiteralPath $unc) {
+            Write-Host "UNC is available."
+            break
+          }
+          Start-Sleep -Milliseconds 300
+        }
+        if (-not (Test-Path -LiteralPath $unc)) {
+          Write-Host "UNC still not available after $($maxTries*300) ms – continuing anyway"
         }
 
     # ────────────────────────────────────────────
