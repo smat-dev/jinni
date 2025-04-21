@@ -55,11 +55,18 @@ jobs:
       run: |
         wsl bash -c 'mkdir -p /home/runner/testproj && echo hi > /home/runner/testproj/hello.txt'
 
-    # Warm up WSL path provider (may help Path.exists() on \\wsl$)
-    - name: Warm-up WSL path
-      shell: cmd # Use cmd for simple dir command
+    - name: Warm-up WSL UNC share
+      shell: pwsh
       run: |
-         dir \\wsl$\Ubuntu-22.04\home\runner\testproj\ > nul
+        $distro = (wsl -l -q | Select-Object -First 1).Trim()
+        if ($distro) {
+          $unc = "\\\\wsl$\\$distro\\home\\runner\\testproj"
+          Write-Host "Warming up $unc"
+          # Try accessing the path, ignore errors if it fails (it might not be ready yet)
+          cmd /c "dir $unc > nul 2>&1" || echo "UNC not yet available; continuing anyway"
+        } else {
+          Write-Host "No WSL distro found – skipping warm-up"
+        }
 
     # ────────────────────────────────────────────
     #  Smoke-tests jinni path translation from Windows
@@ -67,14 +74,20 @@ jobs:
     - name: Smoke test vscode-remote URI
       shell: pwsh
       run: |
+        $distro = (wsl -l -q | Select-Object -First 1).Trim()
+        if (-not $distro) { throw "Could not determine WSL distro name." }
+        $uri = "vscode-remote://wsl+$distro/home/runner/testproj"
+        Write-Host "Testing URI: $uri"
         & $env:VENV_BIN\Activate.ps1
-        & $env:VENV_BIN\jinni.exe --list-only `
-          'vscode-remote://wsl+Ubuntu-22.04/home/runner/testproj' |
-          Select-String 'hello.txt'
+        & $env:VENV_BIN\jinni.exe --list-only $uri | Select-String 'hello.txt'
 
     - name: Smoke test POSIX path
       shell: pwsh
       run: |
+        $distro = (wsl -l -q | Select-Object -First 1).Trim()
+        if (-not $distro) { throw "Could not determine WSL distro name." }
+        Write-Host "Assuming WSL distro for POSIX path test: $distro"
         & $env:VENV_BIN\Activate.ps1
-        & $env:VENV_BIN\jinni.exe --list-only '/home/runner/testproj' |
-          Select-String 'hello.txt'
+        $env:JINNI_ASSUME_WSL_DISTRO=$distro
+        & $env:VENV_BIN\jinni.exe --list-only '/home/runner/testproj' | Select-String 'hello.txt'
+        $env:JINNI_ASSUME_WSL_DISTRO='' # Clear env var
