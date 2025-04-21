@@ -9,12 +9,6 @@ from jinni.utils import _translate_wsl_path, _find_wslpath, _cached_wsl_to_unc, 
 from functools import lru_cache # Import lru_cache
 import platform as real_platform
 
-# Clear caches before each test function to avoid interference
-@pytest.fixture(autouse=True)
-def clear_lru_caches():
-    _find_wslpath.cache_clear()
-    _cached_wsl_to_unc.cache_clear()
-
 # --- Test Cases for _translate_wsl_path ---
 
 # Helper to mock platform.system

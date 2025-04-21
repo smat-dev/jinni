@@ -91,13 +91,13 @@ def _build_unc_path(distro: str, linux_path: str) -> str:
         fallback = rf"{_UNC_PREFIX}\{safe_distro}{linux_path}".replace("/", "\\")
         return fallback
 
-@lru_cache(maxsize=256)
 def _cached_wsl_to_unc(wslpath_executable: str, posix_path: str) -> str | None:
     """
-    Return a verified UNC (\\wsl$\...) for *posix_path* or None if wslpath
-    can't supply one.
-    Uses wslpath -u first, then -w, checking existence for each.
-    Caches the result (including None if no valid path is found).
+    Translate *posix_path* using **wslpath**.  
+    – Try "u", then "w".  
+    – Verify that the returned string is a \\wsl$ UNC and that the share is
+      reachable.
+    – Return the verified UNC or **None**.
     """
     def _try(flag: str) -> str | None:
         try:
@@ -152,12 +152,9 @@ def _cached_wsl_to_unc(wslpath_executable: str, posix_path: str) -> str | None:
     if unc:
         return unc
 
-    # 3️⃣ Both flags failed.  Don't memoise the negative result – the \\wsl$
-    #    share may appear moments later.  Python 3.10 lacks cache_pop(), so we
-    #    just clear the tiny cache.
-    _cached_wsl_to_unc.cache_clear()
+    # 3️⃣ Both flags failed
     logger.debug(
-        "Both wslpath -u and -w failed to produce a verified UNC path for %r.",
+        "wslpath -u/-w both failed to translate %r into a verified UNC.",
         posix_path,
     )
     return None
