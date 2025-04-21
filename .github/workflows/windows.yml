@@ -18,14 +18,16 @@ jobs:
         python-version: "3.11"
 
     - name: Install Jinni and dependencies
+      shell: pwsh # Explicitly use PowerShell
       run: |
+        python -m pip install --upgrade pip # Ensure pip is available
         pip install uv
         uv venv .venv
-        .\\.venv\\Scripts\\uv pip install -e .
-        .\\.venv\\Scripts\\uv pip install pytest pytest-asyncio # Add pytest installation
+        .\\.venv\\Scripts\\Activate.ps1 # Activate the venv
+        uv pip install -e .[dev]        # Use global uv, install dev extras
 
     - name: Run tests
-      run: .\\.venv\\Scripts\\pytest -v                # pure Windows tests
+      run: pytest -v                # pure Windows tests
 
     # --- WSL Smoke Test Setup & Execution ---
     - name: Enable WSL + Ubuntu
