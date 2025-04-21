@@ -20,6 +20,8 @@ jobs:
     - name: Install Jinni and dependencies
       run: |
         pip install uv
+        uv venv .venv
+        .\.venv\Scripts\activate
         uv pip install -e .
         uv pip install pytest # Add pytest installation
 

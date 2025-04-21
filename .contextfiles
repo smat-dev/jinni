@@ -1,2 +1,3 @@
 # Exclude development reference materials
 !dev-reference/
+!LICENSE
