@@ -8,7 +8,7 @@ import logging
 import mimetypes
 import string
 import platform, subprocess, shutil
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, quote
 from pathlib import Path
 from typing import List, Tuple, Dict, Optional, Any
 from functools import lru_cache
@@ -385,15 +385,26 @@ def _translate_wsl_path(path_str: str) -> str:
     """
     # --- Initial Guards ---
     if not path_str:
-        return path_str # Return empty string if input is empty
+        return "" # Return empty string if input is empty
     if os.environ.get("JINNI_NO_WSL_TRANSLATE") == "1":
         logger.debug("WSL path translation explicitly disabled via JINNI_NO_WSL_TRANSLATE=1")
         return path_str
-    # Check platform case-insensitively
-    if platform.system().lower() != "windows":
-        return path_str # Only translate on Windows
 
-    # Check if it's already a UNC path (likely \\wsl$ or \\wsl.localhost)
+    host_is_windows = platform.system().lower() == "windows"
+
+    # ───────────────────────────────────────────────────────────────
+    #  Handle non‑Windows systems (Linux, macOS) - Return stripped URI or original
+    # ───────────────────────────────────────────────────────────────
+    if not host_is_windows:
+        stripped = _strip_wsl_uri_to_posix(path_str)
+        # Return stripped POSIX path if successful, otherwise the original path
+        return stripped if stripped is not None else path_str
+
+    # ───────────────────────────────────────────────────────────────
+    #  Handle Windows systems - Return translated UNC path or original
+    # ───────────────────────────────────────────────────────────────
+
+    # Check if it's already a UNC path
     if path_str.startswith(r"\\wsl"):
         logger.debug(f"Path '{path_str}' already looks like a WSL UNC path. Returning original.")
         return path_str
@@ -401,45 +412,43 @@ def _translate_wsl_path(path_str: str) -> str:
     parsed = urlparse(path_str)
     logger.debug(f"Parsing path/URI '{path_str}': scheme='{parsed.scheme}', netloc='{parsed.netloc}', path='{parsed.path}'")
 
-    distro: Optional[str] = None
-    linux_path: Optional[str] = None
-
-    # --- URI Handling ---
-    # 1) Handle vscode-remote://wsl+Distro/path or vscode-remote://wsl.localhost/Distro/path
+    # 1) Handle vscode-remote:// URIs
     if parsed.scheme == "vscode-remote":
-        if parsed.netloc.startswith("wsl+"):
-            distro = parsed.netloc[len("wsl+"):]
+        netloc_decoded = unquote(parsed.netloc)
+        distro: Optional[str] = None
+        linux_path: Optional[str] = None
+        uri_type: Optional[str] = None # Initialize uri_type
+
+        if netloc_decoded.lower().startswith("wsl+"):
+            distro = netloc_decoded[len("wsl+"):]
             linux_path = unquote(parsed.path)
             uri_type = "wsl+"
-        elif parsed.netloc == "wsl.localhost":
-            # Path is like /Distro/path
+        elif netloc_decoded.lower() == "wsl.localhost":
             path_parts = parsed.path.strip("/").split("/", 1)
             if len(path_parts) >= 1:
                 distro = path_parts[0]
                 linux_path = "/" + unquote(path_parts[1]) if len(path_parts) > 1 else "/"
                 uri_type = "wsl.localhost"
             else:
-                 logger.warning(f"Could not extract distro from wsl.localhost URI path: '{parsed.path}'. Returning original.")
-                 return path_str
-        else:
-             uri_type = "other" # Not a WSL URI we handle
+                logger.warning(f"Could not extract distro from wsl.localhost URI path: '{parsed.path}'. Returning original.")
+                return path_str # Malformed wsl.localhost
 
-        if distro:
+        # Build UNC if distro and path were found
+        if distro and linux_path is not None:
             logger.debug(f"Extracted distro='{distro}', linux_path='{linux_path}' from vscode-remote ({uri_type}) URI.")
             windows_unc_path = _build_unc_path(distro, linux_path)
             logger.debug(f"Translated vscode-remote URI '{path_str}' to UNC: '{windows_unc_path}'")
             return windows_unc_path
-        elif uri_type != "other": # Log only if it looked like a WSL URI but failed extraction
-             logger.warning(f"WSL URI '{path_str}' did not yield a valid distro name. Returning original.")
-             return path_str
-
+        elif distro is None and uri_type == "wsl+": # Handle case wsl+ but no distro found
+            logger.warning(f"WSL URI '{path_str}' did not yield a valid distro name. Returning original.")
+            return path_str
+        # If it was vscode-remote scheme but not wsl+ or wsl.localhost (e.g., ssh-remote), fall through to return original
 
     # 2) Handle vscode://vscode-remote/wsl+Distro/path
     elif parsed.scheme == "vscode" and parsed.netloc == "vscode-remote":
-        # Path is like /wsl+Distro/path
-        path_parts = parsed.path.strip("/").split("/", 1) # ['wsl+Distro', 'path'] or ['wsl+Distro']
-        if len(path_parts) >= 1 and path_parts[0].startswith("wsl+"):
-            authority = path_parts[0] # e.g., wsl+Ubuntu
+        path_parts = parsed.path.strip("/").split("/", 1)
+        if len(path_parts) >= 1 and path_parts[0].lower().startswith("wsl+"):
+            authority = path_parts[0]
             distro = authority[len("wsl+"):]
             if distro:
                 linux_path = "/" + unquote(path_parts[1]) if len(path_parts) > 1 else "/"
@@ -450,23 +459,63 @@ def _translate_wsl_path(path_str: str) -> str:
             else:
                 logger.warning(f"Alternate WSL URI authority '{authority}' is missing distro name. Returning original path: '{path_str}'")
                 return path_str
+        # If not wsl+ authority, fall through
 
-    # --- POSIX Path Handling ---
     # 3) Handle pure POSIX path /path/to/file
-    # Check only if it starts with / and has no scheme (to avoid re-processing URIs)
     elif path_str.startswith("/") and not parsed.scheme:
         wslpath_exe = _find_wslpath() # Lazy lookup
         if wslpath_exe:
-            # Use cached conversion function
             win_path = _cached_wsl_to_unc(wslpath_exe, path_str)
             if win_path:
-                return win_path
-            # else: _cached_wsl_to_unc already logged the error, fall through to return original
-
+                return win_path # Return translated UNC path
+            else:
+                # wslpath call failed, _cached_wsl_to_unc logged it
+                return path_str # Return original POSIX path
         else:
-             logger.debug("wslpath executable not found, cannot translate POSIX path.")
-             # Fall through to return original path
+             logger.debug("wslpath executable not found, cannot translate POSIX path. Returning original.")
+             return path_str # Return original POSIX path
 
-    # 4) No translation needed or possible (Windows path, other URI, non-WSL POSIX, wslpath fail/missing)
-    # logger.debug(f"Path '{path_str}' did not match any WSL translation conditions or failed translation. Returning original.") # Removed redundant log
+    # 4) No translation needed or possible (Windows path, other URI scheme, etc.)
+    logger.debug(f"Path '{path_str}' did not match WSL translation conditions on Windows. Returning original.")
     return path_str
+
+# ───────────────────────────────────────────────────────────────
+#  Helper: strip VS Code WSL URIs to plain /posix/path
+# ───────────────────────────────────────────────────────────────
+def _strip_wsl_uri_to_posix(uri: str) -> Optional[str]:
+    """
+    If *uri* is a vscode‑remote WSL URI, return the embedded POSIX path
+    (`/home/…`).  Otherwise return ``None``.
+    Works even when the '+’ is percent‑encoded.
+    Handles `wsl+` style for both `vscode-remote:` and `vscode:` schemes.
+    Does NOT handle `wsl.localhost` style for stripping.
+    """
+    try:
+        p = urlparse(uri)
+        logger.debug(f"[_strip_wsl_uri_to_posix] Parsed URI: scheme='{p.scheme}', netloc='{p.netloc}', path='{p.path}'")
+
+        # vscode-remote://wsl+Ubuntu/home/you
+        if p.scheme == "vscode-remote":
+            netloc_dec = unquote(p.netloc)
+            logger.debug(f"[_strip_wsl_uri_to_posix] vscode-remote: netloc_dec='{''.join(c if ' ' <= c <= '~' else repr(c) for c in netloc_dec)}'") # Log safely
+            # Make check case-insensitive
+            if netloc_dec.lower().startswith("wsl+"):
+                result = unquote(p.path) or "/"
+                logger.debug(f"[_strip_wsl_uri_to_posix] Matched vscode-remote wsl+. Returning: '{result}'")
+                return result
+
+        # vscode://vscode-remote/wsl+Ubuntu/home/you
+        if p.scheme == "vscode" and p.netloc == "vscode-remote":
+            logger.debug(f"[_strip_wsl_uri_to_posix] vscode: path='{p.path}'")
+            parts = p.path.lstrip("/").split("/", 1)
+            # Make check case-insensitive
+            if parts and parts[0].lower().startswith("wsl+"):
+                result = "/" + unquote(parts[1]) if len(parts) > 1 else "/"
+                logger.debug(f"[_strip_wsl_uri_to_posix] Matched vscode wsl+. Returning: '{result}'")
+                return result
+
+        logger.debug(f"[_strip_wsl_uri_to_posix] No match found. Returning None.")
+        return None
+    except Exception as e:
+        logger.error(f"[_strip_wsl_uri_to_posix] Error processing URI '{uri}': {e}", exc_info=True)
+        return None # Return None on unexpected error
