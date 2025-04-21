@@ -1,0 +1,43 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install Jinni and dependencies
+      run: |
+        pip install uv
+        uv pip install -e .
+        uv pip install pytest # Add pytest installation
+
+    - name: Run tests
+      run: pytest -v                # pure Windows tests
+
+    # --- WSL Smoke Test Setup & Execution ---
+    - name: Enable WSL + Ubuntu
+      run: |
+        wsl --install -d Ubuntu --no-launch
+        wsl -d Ubuntu -u root -- echo "WSL Enabled"
+
+    - name: Create test directory and file inside WSL
+      run: |
+        wsl -d Ubuntu -- mkdir -p /home/runner/testproj
+        wsl -d Ubuntu -- bash -c "echo 'WSL Test Content' > /home/runner/testproj/hello.txt"
+        wsl -d Ubuntu -- ls -l /home/runner/testproj # Verify file creation
+
+    - name: Smoke test vscode-remote URI
+      run: |
+        uvx jinni --list-only vscode-remote://wsl+Ubuntu/home/runner/testproj 
