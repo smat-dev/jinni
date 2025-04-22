@@ -307,6 +307,13 @@ def test_translate_wsl_path_parametrized(
     if triggers_fallback:
         monkeypatch.setattr("jinni.utils.Path", MockPath)
 
+    # --- Patch _get_default_wsl_distro for specific cases ---
+    if request.node.callspec.id in [
+        "fallback_success_no_wslpath_env_var_exists_ok",
+        "fallback_success_no_wslpath_env_var_exists_false",
+    ]:
+        monkeypatch.setattr("jinni.utils._get_default_wsl_distro", lambda: "TestDistro")
+
     # --- Perform the Call and Assert ---
     if expected_exception_type:
         # Expecting an exception

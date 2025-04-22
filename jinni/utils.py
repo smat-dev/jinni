@@ -160,36 +160,28 @@ def _cached_wsl_to_unc(wslpath_executable: str, posix_path: str) -> str | None:
     return None
 
 @lru_cache(maxsize=1)
-def _get_default_wsl_distro() -> Optional[str]:
+def _get_default_wsl_distro() -> str:
     """
-    Ask WSL for the default distro, coping with both the new UTF‑8 output
-    (`--utf8`, Windows 11) and the original UTF‑16 LE output (Windows 10).
-    Return *None* if WSL is unavailable.
+    Return the default WSL distro (never None):
+    - Tries `wsl -l -q` (UTF-8/CP), then UTF-16LE if needed.
+    - Falls back to 'Ubuntu' if no distro is found.
     """
-
-    def _first_nonblank(text: str) -> Optional[str]:
-        for line in text.splitlines():
-            line = line.split("\x00", 1)[0].strip()   # trim NULs, whitespace
-            if line:
-                return line
-        return None
-
-    for args, enc in (
-        (["wsl", "-l", "-q", "--utf8"], "utf-8"),
-        (["wsl", "-l", "-q"],            "utf-16le"),
-    ):
-        try:
-            raw = subprocess.check_output(args, stderr=subprocess.DEVNULL)
-            distro = _first_nonblank(raw.decode(enc, errors="ignore"))
-            if distro:
-                return distro
-        except FileNotFoundError:
-            break   # wsl.exe not present – no point continuing
-        except subprocess.CalledProcessError:
-            continue   # try the other encoding / argument set
-
-    logger.debug("'wsl -l -q' produced no usable output (no distros?).")
-    return None
+    distro = None
+    try:
+        proc = subprocess.run(
+            ["wsl", "-l", "-q"],
+            capture_output=True,  check=False,
+            text=True,  timeout=2,
+        )
+        if proc.returncode == 0:
+            lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+            if not lines:
+                # Try decoding as UTF-16LE if no lines found (pre-Win11 WSL)
+                lines = [ln.strip() for ln in proc.stdout.encode().decode("utf-16le", "ignore").splitlines() if ln.strip()]
+            distro = lines[0] if lines else None
+    except Exception:
+        pass
+    return distro or "Ubuntu"
 
 # --- Constants moved temporarily or redefined ---
 # These might belong in a dedicated constants module later
@@ -594,19 +586,12 @@ def _translate_wsl_path(path_str: str) -> str:
              logger.debug("wslpath executable not found. Attempting manual fallback.")
 
         # --- Manual Fallback (wslpath failed/not found OR _cached_wsl_to_unc returned None) ---
-        # Try env var first
-        assumed_distro = os.environ.get("JINNI_ASSUME_WSL_DISTRO")
-        distro_source = "environment variable JINNI_ASSUME_WSL_DISTRO"
-
-        # If no env var, try getting default distro
-        if not assumed_distro:
-            assumed_distro = _get_default_wsl_distro() # Calls 'wsl -l -q'
-            distro_source = "'wsl -l -q' output"
+        assumed_distro = os.getenv("JINNI_ASSUME_WSL_DISTRO") or _get_default_wsl_distro()
 
         if assumed_distro:
             logger.debug(
-                "Using assumed WSL distro %r from %s for manual UNC path construction.",
-                assumed_distro, distro_source,
+                "Using assumed WSL distro %r for manual UNC path construction.",
+                assumed_distro,
             )
             candidate_unc_path = _build_unc_path(assumed_distro, path_str)
 

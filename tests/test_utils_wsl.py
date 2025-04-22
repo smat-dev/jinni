@@ -139,6 +139,17 @@ def test_translate_unc_path():
     assert _translate_wsl_path(generic_unc) == generic_unc
 
 
+def test_translate_posix_path_hard_default(monkeypatch):
+    """When no distro information is available we default to Ubuntu."""
+    # simulate missing env‑var and empty `wsl -l -q`
+    monkeypatch.delenv("JINNI_ASSUME_WSL_DISTRO", raising=False)
+    monkeypatch.setattr("jinni.utils._get_default_wsl_distro", lambda: "Ubuntu")
+    # should not raise
+    from jinni import utils
+    translated = utils._translate_wsl_path("/home/foo.txt")
+    assert translated.startswith(r"\\wsl$\Ubuntu\\")
+
+
 # --- Tests for wslpath failure / manual fallback ---
 
 @patch('jinni.utils._find_wslpath', return_value=None)
