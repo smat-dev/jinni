@@ -159,36 +159,37 @@ def _cached_wsl_to_unc(wslpath_executable: str, posix_path: str) -> str | None:
     )
     return None
 
-@lru_cache(maxsize=1) # Cache the result of querying WSL
+@lru_cache(maxsize=1)
 def _get_default_wsl_distro() -> Optional[str]:
-    """Gets the default WSL distribution name by running `wsl -l -q`."""
-    try:
-        # Run 'wsl -l -q' which lists distros quietly (only names)
-        # The default distro might not always be first, but this is a common assumption.
-        # A more robust method might involve parsing 'wsl -l --running' or config.
-        # For now, assume the first listed is a usable one if present.
-        out = subprocess.check_output(["wsl", "-l", "-q"], text=True, timeout=3, stderr=subprocess.DEVNULL)
-        lines = out.splitlines()
-        if lines:
-            first_distro = lines[0].strip()
-            logger.debug(f"Found potential WSL default/first distro: '{first_distro}'")
-            return first_distro
-        else:
-            logger.debug("'wsl -l -q' ran but produced no output (no distros?).")
-            return None
-    except FileNotFoundError:
-        logger.debug("'wsl' command not found. Cannot determine default distro.")
+    """
+    Ask WSL for the default distro, coping with both the new UTF‑8 output
+    (`--utf8`, Windows 11) and the original UTF‑16 LE output (Windows 10).
+    Return *None* if WSL is unavailable.
+    """
+
+    def _first_nonblank(text: str) -> Optional[str]:
+        for line in text.splitlines():
+            line = line.split("\x00", 1)[0].strip()   # trim NULs, whitespace
+            if line:
+                return line
         return None
-    except subprocess.TimeoutExpired:
-        logger.warning("Timeout running 'wsl -l -q'. Cannot determine default distro.")
-        return None
-    except subprocess.CalledProcessError as e:
-        # Log as debug because this often means no distros installed or WSL not fully enabled.
-        logger.debug(f"Command 'wsl -l -q' failed (return code {e.returncode}). Cannot determine default distro.")
-        return None
-    except Exception as e:
-        logger.error(f"Unexpected error running 'wsl -l -q': {e}")
-        return None
+
+    for args, enc in (
+        (["wsl", "-l", "-q", "--utf8"], "utf-8"),
+        (["wsl", "-l", "-q"],            "utf-16le"),
+    ):
+        try:
+            raw = subprocess.check_output(args, stderr=subprocess.DEVNULL)
+            distro = _first_nonblank(raw.decode(enc, errors="ignore"))
+            if distro:
+                return distro
+        except FileNotFoundError:
+            break   # wsl.exe not present – no point continuing
+        except subprocess.CalledProcessError:
+            continue   # try the other encoding / argument set
+
+    logger.debug("'wsl -l -q' produced no usable output (no distros?).")
+    return None
 
 # --- Constants moved temporarily or redefined ---
 # These might belong in a dedicated constants module later

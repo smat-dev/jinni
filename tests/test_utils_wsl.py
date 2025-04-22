@@ -58,17 +58,18 @@ def clear_caches():
 
 
 def test_translate_valid_posix_path_file():
-    """Test translation of an existing POSIX file path."""
-    translated = _translate_wsl_path(CI_WSL_EXISTING_FILE_POSIX)
-    # Manual construction is now always returned – existence is not guaranteed
-    assert translated.lower() == EXPECTED_UNC_FILE.lower()
+    """POSIX file path → UNC (fallback)."""
+    with patch.dict(os.environ, {}, clear=False):
+        translated = _translate_wsl_path(CI_WSL_EXISTING_FILE_POSIX)
+        assert translated.lower() == EXPECTED_UNC_FILE.lower()
 
 
 def test_translate_valid_posix_path_dir():
-    """Test translation of an existing POSIX directory path."""
-    translated = _translate_wsl_path(CI_WSL_EXISTING_DIR_POSIX)
-    assert translated.lower() == EXPECTED_UNC_DIR.lower()
-    assert translated.lower().startswith(r"\\wsl$".lower())
+    """POSIX directory path → UNC (fallback)."""
+    with patch.dict(os.environ, {}, clear=False):
+        translated = _translate_wsl_path(CI_WSL_EXISTING_DIR_POSIX)
+        assert translated.lower() == EXPECTED_UNC_DIR.lower()
+        assert translated.lower().startswith(r"\\wsl$".lower())
 
 
 def test_translate_nonexistent_posix_path():
@@ -111,9 +112,9 @@ def test_translate_invalid_uri_missing_distro():
 
 
 def test_translate_invalid_uri_localhost_missing_distro():
-    """Test translation of wsl.localhost URI missing the distro name in path."""
-    uri = f"vscode-remote://wsl.localhost{CI_WSL_EXISTING_FILE_POSIX}" # Distro missing from path
-    with pytest.raises(ValueError, match="missing or invalid distro/path"): 
+    # Double '//' after the authority → truly missing distro
+    uri = f"vscode-remote://wsl.localhost//{CI_WSL_EXISTING_FILE_POSIX.lstrip('/')}"
+    with pytest.raises(ValueError, match="missing distro name"):
         _translate_wsl_path(uri)
 
 
