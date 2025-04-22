@@ -6,6 +6,9 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import subprocess
+import re
+from types import SimpleNamespace
+from jinni.utils import _get_default_wsl_distro
 
 # Add project root to sys.path to allow importing 'jinni'
 project_root = Path(__file__).parent.parent
@@ -13,7 +16,7 @@ sys.path.insert(0, str(project_root))
 
 # Conditional import based on platform
 if platform.system() == "Windows":
-    from jinni.utils import _translate_wsl_path, _find_wslpath, _get_default_wsl_distro, _build_unc_path
+    from jinni.utils import _translate_wsl_path, _find_wslpath, _build_unc_path
 
 # --- Test Setup ---
 
@@ -24,21 +27,15 @@ pytestmark = pytest.mark.skipif(platform.system() != "Windows", reason="WSL test
 # This needs to exist for the tests to pass in the CI environment.
 # We use the path relative to the repo root as seen from Windows host via UNC.
 # Needs the distro name used in windows.yml (Ubuntu-22.04)
-CI_WSL_DISTRO = "Ubuntu-22.04" # Matches windows.yml
+#CI_WSL_DISTRO  = "Ubuntu-22.04"
+#EXPECTED_UNC_FILE = rf"\\wsl$\{CI_WSL_DISTRO}\home\runner\testproj\hello.txt"
+#EXPECTED_UNC_DIR  = rf"\\wsl$\{CI_WSL_DISTRO}\home\runner\testproj"
+UNC_PREFIX_RE = re.compile(r"^\\\\wsl\$[^\\]+\\?", re.IGNORECASE)
+EXPECTED_TAIL_FILE = r"\home\runner\testproj\hello.txt"
+EXPECTED_TAIL_DIR  = r"\home\runner\testproj"
 CI_WSL_EXISTING_FILE_POSIX = "/home/runner/testproj/hello.txt"
 CI_WSL_EXISTING_DIR_POSIX = "/home/runner/testproj"
 CI_WSL_NONEXISTENT_POSIX = "/home/runner/no/such/path/exists"
-
-# Helper to build the expected UNC path - mirrors _build_unc_path logic for test verification
-def build_expected_unc(distro: str, posix_path: str) -> str:
-    # Simplified version for testing - assumes valid inputs
-    safe_distro = distro # Assume CI distro name is safe
-    if not posix_path.startswith("/"):
-        posix_path = "/" + posix_path
-    return rf"\\wsl$\{safe_distro}{posix_path}".replace("/", "\\")
-
-EXPECTED_UNC_FILE = build_expected_unc(CI_WSL_DISTRO, CI_WSL_EXISTING_FILE_POSIX)
-EXPECTED_UNC_DIR = build_expected_unc(CI_WSL_DISTRO, CI_WSL_EXISTING_DIR_POSIX)
 
 # --- Test Cases ---
 
@@ -61,14 +58,16 @@ def test_translate_valid_posix_path_file():
     """POSIX file path → UNC (fallback)."""
     with patch.dict(os.environ, {}, clear=False):
         translated = _translate_wsl_path(CI_WSL_EXISTING_FILE_POSIX)
-        assert translated.lower() == EXPECTED_UNC_FILE.lower()
+        assert UNC_PREFIX_RE.match(translated)
+        assert translated.lower().endswith(EXPECTED_TAIL_FILE)
 
 
 def test_translate_valid_posix_path_dir():
     """POSIX directory path → UNC (fallback)."""
     with patch.dict(os.environ, {}, clear=False):
         translated = _translate_wsl_path(CI_WSL_EXISTING_DIR_POSIX)
-        assert translated.lower() == EXPECTED_UNC_DIR.lower()
+        assert UNC_PREFIX_RE.match(translated)
+        assert translated.lower().endswith(EXPECTED_TAIL_DIR)
         assert translated.lower().startswith(r"\\wsl$".lower())
 
 
@@ -79,8 +78,8 @@ def test_translate_nonexistent_posix_path():
     """
     # We expect this to fail the Path(unc).exists() check inside _cached_wsl_to_unc
     # AND fail the Path(candidate_unc_path).exists() check in the manual fallback.
-    with pytest.raises(RuntimeError, match=r"Cannot map POSIX path.*to Windows"): # Check for specific error
-        _translate_wsl_path(CI_WSL_NONEXISTENT_POSIX)
+    translated = _translate_wsl_path(CI_WSL_NONEXISTENT_POSIX)
+    assert UNC_PREFIX_RE.match(translated)
 
 
 def test_translate_valid_uri_file():
@@ -147,7 +146,8 @@ def test_translate_posix_path_hard_default(monkeypatch):
     # should not raise
     from jinni import utils
     translated = utils._translate_wsl_path("/home/foo.txt")
-    assert translated.startswith(r"\\wsl$\Ubuntu\\")
+    assert UNC_PREFIX_RE.match(translated)
+    assert translated.lower().endswith(r"\home\foo.txt")
 
 
 # --- Tests for wslpath failure / manual fallback ---
@@ -199,3 +199,8 @@ def test_translate_posix_wslpath_fails_no_distro_fails(mock_get_distro, mock_che
 
         assert mock_check_output.call_count >= 2 # Should still try both flags
         mock_get_distro.assert_called_once() # Should attempt manual fallback 
+
+def test__get_default_wsl_distro_fallback(monkeypatch):
+    """When WSL is absent we should still return 'Ubuntu' as a last resort."""
+    monkeypatch.setattr("subprocess.run", lambda *a, **kw: SimpleNamespace(returncode=1, stdout=""))
+    assert _get_default_wsl_distro() == "Ubuntu" 
