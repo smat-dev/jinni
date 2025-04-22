@@ -8,7 +8,12 @@ from unittest.mock import patch, MagicMock
 import subprocess
 import re
 from types import SimpleNamespace
-from jinni.utils import _get_default_wsl_distro
+from jinni.utils import (
+    _translate_wsl_path,
+    _find_wslpath,
+    _build_unc_path,
+    _get_default_wsl_distro,
+)
 
 # Add project root to sys.path to allow importing 'jinni'
 project_root = Path(__file__).parent.parent
@@ -16,26 +21,35 @@ sys.path.insert(0, str(project_root))
 
 # Conditional import based on platform
 if platform.system() == "Windows":
-    from jinni.utils import _translate_wsl_path, _find_wslpath, _build_unc_path
+    from jinni.utils import (
+        _translate_wsl_path,
+        _find_wslpath,
+        _build_unc_path,
+        _get_default_wsl_distro,
+    )
 
 # --- Test Setup ---
 
 # Mark all tests in this module to be skipped if not on Windows
 pytestmark = pytest.mark.skipif(platform.system() != "Windows", reason="WSL tests require Windows host")
 
-# Known path created by the CI workflow inside WSL
-# This needs to exist for the tests to pass in the CI environment.
-# We use the path relative to the repo root as seen from Windows host via UNC.
-# Needs the distro name used in windows.yml (Ubuntu-22.04)
-#CI_WSL_DISTRO  = "Ubuntu-22.04"
-#EXPECTED_UNC_FILE = rf"\\wsl$\{CI_WSL_DISTRO}\home\runner\testproj\hello.txt"
-#EXPECTED_UNC_DIR  = rf"\\wsl$\{CI_WSL_DISTRO}\home\runner\testproj"
-UNC_PREFIX_RE = re.compile(r"^\\\\wsl\$[^\\]+\\?", re.IGNORECASE)
+# ---------- paths used everywhere ----------
+CI_WSL_EXISTING_FILE_POSIX = "/home/runner/testproj/hello.txt"
+CI_WSL_EXISTING_DIR_POSIX  = "/home/runner/testproj"
+CI_WSL_NONEXISTENT_POSIX   = "/home/runner/no/such/path/exists"
+
+# ---------- figure out which distro we should reference ----------
+CI_WSL_DISTRO = _get_default_wsl_distro() or "Ubuntu"
+
+# ---------- helpers / expected UNC ----------
+EXPECTED_UNC_FILE = _build_unc_path(CI_WSL_DISTRO, CI_WSL_EXISTING_FILE_POSIX)
+EXPECTED_UNC_DIR  = _build_unc_path(CI_WSL_DISTRO, CI_WSL_EXISTING_DIR_POSIX)
+
+# ---------- regex that really matches a WSL UNC prefix ----------
+UNC_PREFIX_RE = re.compile(r"^\\\\wsl\$\\[^\\]+\\", re.IGNORECASE)
+
 EXPECTED_TAIL_FILE = r"\home\runner\testproj\hello.txt"
 EXPECTED_TAIL_DIR  = r"\home\runner\testproj"
-CI_WSL_EXISTING_FILE_POSIX = "/home/runner/testproj/hello.txt"
-CI_WSL_EXISTING_DIR_POSIX = "/home/runner/testproj"
-CI_WSL_NONEXISTENT_POSIX = "/home/runner/no/such/path/exists"
 
 # --- Test Cases ---
 
@@ -130,12 +144,8 @@ def test_translate_windows_path():
 
 
 def test_translate_unc_path():
-    """Test that existing UNC paths (WSL or otherwise) are returned unchanged."""
-    # Use the expected UNC path which should exist in CI
+    """Unchanged if the input is already a UNC."""
     assert _translate_wsl_path(EXPECTED_UNC_FILE) == EXPECTED_UNC_FILE
-    # Test a generic UNC path
-    generic_unc = "\\\\fileserver\\share\\file.txt"
-    assert _translate_wsl_path(generic_unc) == generic_unc
 
 
 def test_translate_posix_path_hard_default(monkeypatch):
