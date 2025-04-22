@@ -2,6 +2,10 @@
 
 # Jinni: Bring Your Project Into Context
 
+<a href="https://glama.ai/mcp/servers/@smat-dev/jinni">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@smat-dev/jinni/badge" alt="Jinni: Bring Your Project Into Context MCP server" />
+</a>
+
 Jinni is a tool to efficiently provide Large Language Models the context of your projects. It gives a consolidated view of relevant project files complete with metadata, overcoming the limitations and inefficiencies of reading files one by one.
 
 The philosophy behind this tool is that LLM context windows are large, models are smart, and directly seeing your project best equips the model to help with anything you throw at it.
