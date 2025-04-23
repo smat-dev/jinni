@@ -248,3 +248,16 @@ def test_cli_target_dot_directory(test_environment: Path):
     assert "File: README.md" not in stdout
 
     assert stderr.strip() == ""
+
+@pytest.mark.skip(reason="Cannot test NUL handling in CLI subprocess: Python/OS will reject argument before app code runs")
+def test_cli_nul_in_path_triggers_valueerror(test_environment: Path):
+    """Test that a path with an embedded NUL triggers a clean ValueError and does not crash."""
+    test_dir = test_environment
+    # Insert a NUL in the path
+    bad_path = str(test_dir) + "\x00bad"
+    import sys
+    from conftest import run_jinni_cli
+    import pytest
+    with pytest.raises(SystemExit):
+        stdout, stderr = run_jinni_cli([bad_path, "--no-copy"])
+        assert "Embedded NUL" in stderr or "\x00" in stderr

@@ -10,6 +10,7 @@ from jinni.core_logic import read_context # Keep for run_read_context_helper
 from jinni.exceptions import ContextSizeExceededError, DetailedContextSizeError # Moved exceptions
 from jinni.utils import _find_context_files_for_dir # Moved helper
 from jinni.config_system import CONTEXT_FILENAME, DEFAULT_RULES # Import constants
+from jinni.utils import ensure_no_nul
 # SEPARATOR is not directly used/tested here
 
 # --- Test Fixture ---
@@ -390,3 +391,12 @@ def test_read_context_target_nonexistent(test_dir: Path):
             tmp_path=test_dir.parent,
             target_rel="project/nonexistent.txt" # Non-existent target
         )
+
+# --- Test ensure_no_nul utility ---
+def test_ensure_no_nul_utils():
+    # Should not raise
+    ensure_no_nul("abc", "test-field")
+    # Should raise ValueError on NUL
+    import pytest
+    with pytest.raises(ValueError):
+        ensure_no_nul("a\x00b", "test-field")

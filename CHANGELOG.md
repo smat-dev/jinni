@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - WSL path translation (`_translate_wsl_path`) now raises `RuntimeError` on Windows if a POSIX path is given but cannot be translated (e.g., `wslpath` fails and manual fallback also fails due to no WSL/distro found or constructed path not existing).
 
 ### Fixed
-- (Include any bug fixes related to this change if applicable)
+- Fixed crash on Windows when WSL distro name contains embedded NULs due to UTF-16LE output from wsl -l -q. Now raises ValueError with a clear message.
 
 ## [0.1.7] - YYYY-MM-DD
 ### Added

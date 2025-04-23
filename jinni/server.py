@@ -25,7 +25,7 @@ from mcp.server.fastmcp import FastMCP, Context
 # Import from refactored modules
 from jinni.core_logic import read_context as core_read_context # Main functions from new core_logic
 from jinni.exceptions import ContextSizeExceededError, DetailedContextSizeError # Exceptions moved
-from jinni.utils import ESSENTIAL_USAGE_DOC, _translate_wsl_path # Import the shared usage doc constant and WSL path translator
+from jinni.utils import ESSENTIAL_USAGE_DOC, _translate_wsl_path, ensure_no_nul # Import the shared usage doc constant and WSL path translator
 # Constants like DEFAULT_SIZE_LIMIT_MB might be needed if used directly, otherwise remove.
 # Let's assume they are handled within core_logic now.
 
@@ -81,6 +81,11 @@ async def read_context(
     translated_targets = [_translate_wsl_path(t) for t in targets]
     logger.debug(f"Original paths: project_root='{project_root}', targets='{targets}'")
     logger.debug(f"Translated paths: project_root='{translated_project_root}', targets='{translated_targets}'")
+
+    # Defensive NUL check on all incoming paths
+    ensure_no_nul(translated_project_root, "project_root")
+    for t in translated_targets:
+        ensure_no_nul(t, "target path")
 
     logger.debug(f"Processing read_context request: project_root(orig)='{project_root}', targets(orig)='{targets}', list_only={list_only}, rules={rules}, debug_explain={debug_explain}")
     """

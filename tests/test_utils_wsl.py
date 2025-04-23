@@ -13,6 +13,7 @@ from jinni.utils import (
     _find_wslpath,
     _build_unc_path,
     _get_default_wsl_distro,
+    ensure_no_nul,
 )
 
 # Add project root to sys.path to allow importing 'jinni'
@@ -214,3 +215,12 @@ def test__get_default_wsl_distro_fallback(monkeypatch):
     """When WSL is absent we should still return 'Ubuntu' as a last resort."""
     monkeypatch.setattr("subprocess.run", lambda *a, **kw: SimpleNamespace(returncode=1, stdout=""))
     assert _get_default_wsl_distro() == "Ubuntu" 
+
+# --- Test ensure_no_nul utility ---
+def test_ensure_no_nul_wsl():
+    # Should not raise
+    ensure_no_nul("abc", "test-field")
+    # Should raise ValueError on NUL
+    import pytest
+    with pytest.raises(ValueError):
+        ensure_no_nul("a\x00b", "test-field") 

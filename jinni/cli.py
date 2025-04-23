@@ -15,6 +15,7 @@ from jinni.core_logic import read_context, DEFAULT_SIZE_LIMIT_MB, ENV_VAR_SIZE_L
 from jinni.exceptions import ContextSizeExceededError, DetailedContextSizeError # Exceptions moved
 from jinni.utils import ESSENTIAL_USAGE_DOC # Import the shared usage doc constant
 from jinni.utils import _translate_wsl_path # Import the WSL path translator
+from jinni.utils import ensure_no_nul
 # ENV_VAR_SIZE_LIMIT is likely handled internally now
 import pyperclip # Added for clipboard functionality
 
@@ -43,6 +44,12 @@ def handle_read_command(args):
         logger.debug(f"Original project root: {args.project_root} -> Translated: {translated_project_root}")
     if args.overrides:
         logger.debug(f"Original overrides file: {args.overrides} -> Translated: {translated_overrides_file}")
+
+    # Defensive NUL check on all incoming paths
+    if translated_project_root:
+        ensure_no_nul(translated_project_root, "project_root")
+    for p in translated_input_paths:
+        ensure_no_nul(p, "input path")
 
     # --- Use Translated Paths for Input Validation ---
     input_paths = translated_input_paths # Use translated paths from now on

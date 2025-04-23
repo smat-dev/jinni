@@ -8,6 +8,7 @@ from typing import Optional # Added Optional
 from jinni.utils import _translate_wsl_path, _find_wslpath, _cached_wsl_to_unc, _get_default_wsl_distro # Import new helpers
 from functools import lru_cache # Import lru_cache
 import platform as real_platform
+from jinni.utils import ensure_no_nul
 
 # --- Test Cases for _translate_wsl_path ---
 
@@ -371,4 +372,12 @@ def test_malformed_uri_value_error(monkeypatch):
         _translate_wsl_path("vscode://vscode-remote/wsl+/home/user")
     # Test wsl.localhost with only root / (missing distro)
     with pytest.raises(ValueError, match="missing or invalid distro/path in wsl.localhost URI path"):
-        _translate_wsl_path("vscode-remote://wsl.localhost/") 
+        _translate_wsl_path("vscode-remote://wsl.localhost/")
+
+# --- Test ensure_no_nul utility ---
+def test_ensure_no_nul():
+    # Should not raise
+    ensure_no_nul("abc", "test-field")
+    # Should raise ValueError on NUL
+    with pytest.raises(ValueError):
+        ensure_no_nul("a\x00b", "test-field") 

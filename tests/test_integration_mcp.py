@@ -2,6 +2,7 @@ import pytest
 from pathlib import Path
 from mcp import types # MCP Client SDK types
 from conftest import run_mcp_tool_call # Import async helper
+import asyncio
 
 # --- MCP Tests (Asynchronous) ---
 
@@ -342,3 +343,17 @@ async def test_mcp_read_context_missing_rules_raises_error(test_environment: Pat
     error_text = result.content[0].text
     # Check that the error message mentions the missing field
     assert "rules" in error_text.lower() and ("required" in error_text.lower() or "missing" in error_text.lower())
+
+
+@pytest.mark.asyncio
+async def test_mcp_nul_in_target_triggers_valueerror(test_environment: Path):
+    """Test that a target with an embedded NUL triggers a clean ValueError and does not crash."""
+    test_dir = test_environment
+    bad_target = str(test_dir) + "\x00bad"
+    tool_name = "read_context"
+    arguments = { "project_root": str(test_dir), "targets": [bad_target], "rules": [] }
+    from mcp import types
+    result = await run_mcp_tool_call(tool_name, arguments)
+    assert isinstance(result, types.CallToolResult)
+    assert result.isError
+    assert "Embedded NUL" in result.content[0].text or "\x00" in result.content[0].text

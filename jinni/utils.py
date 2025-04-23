@@ -159,11 +159,42 @@ def _cached_wsl_to_unc(wslpath_executable: str, posix_path: str) -> str | None:
     )
     return None
 
+def ensure_no_nul(s: str, field: str = "value"):
+    """
+    Raises ValueError if the string contains an embedded NUL (\x00) or is None.
+    Used to guard against Windows path bugs and invalid input.
+    Typical usage: ensure_no_nul(path, "project_root")
+    """
+    if s is None:
+        raise ValueError(f"Missing value for {field} (got None)")
+    if "\x00" in s:
+        logger.error(f"Embedded NUL (\\x00) found in {field}: {repr(s)}")
+        raise ValueError(f"Embedded NUL (\\x00) found in {field}: {repr(s)}")
+
+# --- Unit Test for ensure_no_nul ---
+def _test_ensure_no_nul():
+    try:
+        ensure_no_nul("abc", "test")  # Should not raise
+    except Exception:
+        print("FAIL: ensure_no_nul raised unexpectedly on normal string")
+        return False
+    try:
+        ensure_no_nul("a\x00b", "test")
+        print("FAIL: ensure_no_nul did not raise on NUL string")
+        return False
+    except ValueError:
+        pass  # Expected
+    print("PASS: ensure_no_nul")
+    return True
+
+if __name__ == "__main__":
+    _test_ensure_no_nul()
+
 @lru_cache(maxsize=1)
 def _get_default_wsl_distro() -> str:
     """
     Return the default WSL distro (never None):
-    - Tries `wsl -l -q` (UTF-8/CP), then UTF-16LE if needed.
+    - Tries `wsl -l -q` (UTF-8/CP or UTF-16LE as needed).
     - Falls back to 'Ubuntu' if no distro is found.
     """
     distro = None
@@ -171,13 +202,18 @@ def _get_default_wsl_distro() -> str:
         proc = subprocess.run(
             ["wsl", "-l", "-q"],
             capture_output=True,  check=False,
-            text=True,  timeout=2,
+            timeout=2,
         )
         if proc.returncode == 0:
-            lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
-            if not lines:
-                # Try decoding as UTF-16LE if no lines found (pre-Win11 WSL)
-                lines = [ln.strip() for ln in proc.stdout.encode().decode("utf-16le", "ignore").splitlines() if ln.strip()]
+            raw = proc.stdout
+            # Detect UTF-16LE: BOM or NULs in first 4 bytes
+            if raw.startswith(b'\xff\xfe') or b'\x00' in raw[:4]:
+                txt = raw.decode("utf-16le", "replace")
+            else:
+                txt = raw.decode("utf-8", "replace")
+            lines = [ln.strip() for ln in txt.splitlines() if ln.strip()]
+            if lines:
+                ensure_no_nul(lines[0], "WSL distro name")
             distro = lines[0] if lines else None
     except Exception:
         pass
@@ -523,6 +559,8 @@ def _translate_wsl_path(path_str: str) -> str:
             distro = netloc_decoded[len("wsl+"):]
             linux_path = unquote(parsed.path)
             uri_type = "wsl+"
+            ensure_no_nul(distro, "WSL distro name from URI")
+            ensure_no_nul(linux_path, "WSL linux_path from URI")
         elif netloc_decoded.lower() == "wsl.localhost":
             # Path should be /<distro>/<actual_path>
             # Reject paths starting with // immediately as they lack a distro
@@ -535,10 +573,14 @@ def _translate_wsl_path(path_str: str) -> str:
                 distro = path_parts[0]
                 linux_path = "/" + unquote(path_parts[1]) # Path part can be empty, becomes "/"
                 uri_type = "wsl.localhost"
+                ensure_no_nul(distro, "WSL distro name from wsl.localhost URI")
+                ensure_no_nul(linux_path, "WSL linux_path from wsl.localhost URI")
             elif len(path_parts) == 1 and path_parts[0]: # Handle case like /DistroName
                 distro = path_parts[0]
                 linux_path = "/" # No path part means root
                 uri_type = "wsl.localhost"
+                ensure_no_nul(distro, "WSL distro name from wsl.localhost URI")
+                ensure_no_nul(linux_path, "WSL linux_path from wsl.localhost URI")
             else:
                 # Malformed wsl.localhost (missing distro or wrong format)
                 logger.warning(f"Could not extract valid distro/path from wsl.localhost URI path: '{parsed.path}'")
@@ -562,6 +604,8 @@ def _translate_wsl_path(path_str: str) -> str:
                 # Malformed alternate vscode uri (missing distro)
                 raise ValueError("missing distro name in alternate vscode URI authority")
             linux_path = "/" + unquote(path_parts[1]) if len(path_parts) > 1 else "/"
+            ensure_no_nul(distro, "WSL distro name from alternate vscode URI")
+            ensure_no_nul(linux_path, "WSL linux_path from alternate vscode URI")
             logger.debug(f"Extracted distro='{distro}', linux_path='{linux_path}' from alternate vscode URI.")
             windows_unc_path = _build_unc_path(distro, linux_path)
             logger.debug(f"Translated alternate vscode URI '{path_str}' to UNC: '{windows_unc_path}'")
@@ -576,6 +620,7 @@ def _translate_wsl_path(path_str: str) -> str:
             verified_unc_path = _cached_wsl_to_unc(wslpath_exe, path_str)
             if verified_unc_path:
                 logger.debug(f"Translated POSIX path '{path_str}' to verified UNC: '{verified_unc_path}'")
+                ensure_no_nul(verified_unc_path, "UNC path from wslpath")
                 return verified_unc_path # Return the verified UNC path
             else:
                 # wslpath call failed or didn't produce a usable path.
@@ -587,6 +632,13 @@ def _translate_wsl_path(path_str: str) -> str:
 
         # --- Manual Fallback (wslpath failed/not found OR _cached_wsl_to_unc returned None) ---
         assumed_distro = os.getenv("JINNI_ASSUME_WSL_DISTRO") or _get_default_wsl_distro()
+        if assumed_distro is None:
+            raise RuntimeError(
+                "Cannot map POSIX path to Windows: No WSL distro found (JINNI_ASSUME_WSL_DISTRO not set and could not detect default WSL distro). "
+                "Ensure WSL is installed and functional, or set JINNI_ASSUME_WSL_DISTRO."
+            )
+        ensure_no_nul(path_str, "POSIX path for manual fallback")
+        ensure_no_nul(assumed_distro, "WSL distro name for manual fallback")
 
         if assumed_distro:
             logger.debug(
@@ -594,6 +646,7 @@ def _translate_wsl_path(path_str: str) -> str:
                 assumed_distro,
             )
             candidate_unc_path = _build_unc_path(assumed_distro, path_str)
+            ensure_no_nul(candidate_unc_path, "UNC path from manual fallback")
 
             # Probe only the share root; individual files may lag.
             share_root = Path(fr"\\wsl$\{assumed_distro}")
