@@ -30,13 +30,14 @@ MCP server config file for Cursor / Roo / Claude Desktop / client of choice:
 {
     "mcpServers": {
         "jinni": {
-            "command": "uvx jinni-server"
+            "command": "uvx",
+            "args": ["jinni-server"]
         }
     }
 }
 ```
 
-*You can optionally constrain the server to only read within a tree for security in case your LLM goes rogue: add --root /absolute/path/ to the command.*
+*You can optionally constrain the server to only read within a tree for security in case your LLM goes rogue: add `"--root", "/absolute/path/"` to the `args` list.*
 
 Install uv if it is not on your system: https://docs.astral.sh/uv/getting-started/installation/
 
@@ -111,13 +112,14 @@ Cursor can silently drop context that is larger than the allowed maximum, so if 
     {
       "mcpServers": {
         "jinni": {
-          "command": "uvx jinni-server"
+          "command": "uvx",
+          "args": ["jinni-server"]
         }
       }
     }
     ```
 
-*You can optionally constrain the server to only read within a tree for security in case your LLM goes rogue: add --root /absolute/path/ to the command.*
+*You can optionally constrain the server to only read within a tree for security in case your LLM goes rogue: add `"--root", "/absolute/path/"` to the `args` list.*
 
 *See your specific MCP client's documentation for precise setup steps. Ensure `uv` is installed*
 
