@@ -18,6 +18,7 @@ from jinni.utils import _translate_wsl_path # Import the WSL path translator
 from jinni.utils import ensure_no_nul
 # ENV_VAR_SIZE_LIMIT is likely handled internally now
 import pyperclip # Added for clipboard functionality
+import tiktoken # Added for token counting
 
 # Setup logger for CLI - will be configured in main()
 logger = logging.getLogger("jinni.cli")
@@ -30,6 +31,146 @@ def handle_usage_command(args):
     logger.debug("Executing essential usage display.")
     # Use the imported constant from utils.py
     print(ESSENTIAL_USAGE_DOC)
+
+def handle_list_token_command(args):
+    """Handles listing files with token counts."""
+    logger.debug("Executing list token logic.")
+    # Reuse setup from handle_read_command
+    translated_input_paths = [_translate_wsl_path(p) for p in args.paths]
+    translated_project_root = _translate_wsl_path(args.project_root) if args.project_root else None
+    translated_overrides_file = _translate_wsl_path(args.overrides) if args.overrides else None
+
+    if translated_project_root:
+        ensure_no_nul(translated_project_root, "project_root")
+    for p in translated_input_paths:
+        ensure_no_nul(p, "input path")
+
+    input_paths = translated_input_paths
+    overrides_file = translated_overrides_file
+    size_limit_mb = args.size_limit_mb
+    debug_explain = args.debug_explain
+    project_root = translated_project_root
+
+    # Minimal logging setup for this command
+    logging.basicConfig(level=logging.DEBUG if debug_explain else logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
+    if debug_explain:
+        logger.info("Debug mode enabled for list-token.")
+
+    override_rules_list: Optional[List[str]] = None
+    if overrides_file:
+        override_path = Path(overrides_file)
+        if not override_path.is_file():
+            print(f"Error: Overrides file not found: {overrides_file}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            with open(override_path, 'r', encoding='utf-8') as f:
+                override_rules_list = [line for line in (l.strip() for l in f) if line and not line.startswith('#')]
+            logger.info(f"Loaded {len(override_rules_list)} override rules from {overrides_file}.")
+        except Exception as e:
+            print(f"Error reading overrides file '{overrides_file}': {e}", file=sys.stderr)
+            sys.exit(1)
+
+    effective_target_paths = input_paths
+    if input_paths == ['.'] and project_root:
+         effective_target_paths = [project_root]
+         logger.debug(f"Targeting specified project root: {project_root}")
+    elif input_paths == ['.'] and not project_root:
+         logger.debug("Targeting default '.'")
+    else:
+         logger.debug(f"Using explicitly provided paths: {input_paths}")
+
+    try:
+        # First, get the list of files using list_only=True
+        file_list_str = read_context(
+            target_paths_str=effective_target_paths,
+            project_root_str=project_root,
+            override_rules=override_rules_list,
+            list_only=True, # Use list_only=True to get the file paths
+            size_limit_mb=size_limit_mb,
+            debug_explain=debug_explain,
+            include_size_in_list=False # We don't need size here
+        )
+
+        file_paths_relative = [line.strip() for line in file_list_str.splitlines() if line.strip()]
+
+        if not file_paths_relative:
+            print("No files found matching the criteria.", file=sys.stderr)
+            return
+
+        # Determine the absolute project root path for resolving relative paths
+        if project_root:
+            abs_project_root = Path(project_root).resolve()
+        else:
+            # Infer root if not provided (similar logic to core_logic)
+            abs_target_paths = [Path(p).resolve() for p in effective_target_paths]
+            try:
+                common_ancestor = Path(os.path.commonpath([str(p) for p in abs_target_paths]))
+                abs_project_root = common_ancestor if common_ancestor.is_dir() else common_ancestor.parent
+            except ValueError:
+                abs_project_root = Path.cwd().resolve()
+            logger.debug(f"Inferred absolute project root for token counting: {abs_project_root}")
+
+
+        # Initialize tiktoken encoder
+        try:
+            # Using cl100k_base as it's common for gpt-4, gpt-3.5-turbo, text-embedding-ada-002
+            enc = tiktoken.get_encoding("cl100k_base")
+        except Exception as e:
+            print(f"Error initializing tiktoken encoder: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        total_tokens = 0
+        output_lines = []
+
+        for rel_path_str in file_paths_relative:
+            abs_file_path = abs_project_root / rel_path_str
+            if not abs_file_path.is_file():
+                logger.warning(f"Skipping non-file path from list: {rel_path_str}")
+                continue
+
+            try:
+                # Read file content - try common encodings
+                content_bytes = abs_file_path.read_bytes()
+                content_str: Optional[str] = None
+                encodings_to_try = ['utf-8', 'latin-1', 'cp1252']
+                for enc_name in encodings_to_try:
+                    try:
+                        content_str = content_bytes.decode(enc_name)
+                        logger.debug(f"Decoded {rel_path_str} using {enc_name}")
+                        break
+                    except UnicodeDecodeError:
+                        continue
+
+                if content_str is None:
+                    logger.warning(f"Could not decode {rel_path_str} with tried encodings. Skipping token count.")
+                    output_lines.append(f"{rel_path_str}: Error decoding")
+                    continue
+
+                # Count tokens
+                num_tokens = len(enc.encode(content_str))
+                total_tokens += num_tokens
+                output_lines.append(f"{rel_path_str}: {num_tokens} tokens")
+
+            except OSError as e:
+                logger.warning(f"Error reading file {rel_path_str} for token counting: {e}")
+                output_lines.append(f"{rel_path_str}: Error reading")
+            except Exception as e:
+                logger.error(f"Unexpected error processing file {rel_path_str} for token counting: {e}", exc_info=debug_explain)
+                output_lines.append(f"{rel_path_str}: Error processing")
+
+        # Print results
+        for line in output_lines:
+            print(line)
+        print("---")
+        print(f"Total: {total_tokens} tokens")
+
+    except Exception as e:
+        # Catch errors from the initial read_context call or path handling
+        print(f"An error occurred during the list-token process: {e}", file=sys.stderr)
+        if debug_explain:
+             import traceback
+             logger.error("Traceback:", exc_info=True)
+        sys.exit(1)
 
 def handle_read_command(args):
     """Handles the context reading logic."""
@@ -222,12 +363,21 @@ Examples:
         metavar="<file>",
         help="Write output to a file instead of stdout."
     )
-    parser.add_argument(
+    # --- Mutually Exclusive Group for Listing Options ---
+    list_group = parser.add_mutually_exclusive_group()
+    list_group.add_argument(
         "-l",
         "--list-only",
         action="store_true",
         help="Only list file paths found, do not include content."
     )
+    list_group.add_argument(
+        "-L",
+        "--list-token",
+        action="store_true",
+        help="List file paths with token counts (using tiktoken cl100k_base) and a total sum."
+    )
+    # --- End Mutually Exclusive Group ---
     parser.add_argument(
         "-S",
         "--size",
@@ -269,6 +419,9 @@ Examples:
     if args.usage:
         # If --usage is used, ignore other arguments and show usage
         handle_usage_command(args)
+    elif args.list_token:
+        # Handle the new list-token command
+        handle_list_token_command(args)
     else:
         # Otherwise, proceed with reading context
         handle_read_command(args)

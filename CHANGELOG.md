@@ -28,5 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Windows + WSL & VS Code-Remote path support: Jinni now auto-converts WSL paths (`/home/user/project`) and `vscode-remote://wsl+Distro/...` URIs to the correct `\\wsl$\Distro\...` UNC form when running on Windows. This applies to paths provided via CLI arguments (`paths`, `--root`, `--overrides`) and the MCP `read_context` tool arguments (`project_root`, `targets`).
 
+## [0.2.4] - YYYY-MM-DD
+
+### Added
+- Added `--list-token` / `-L` CLI option to list files with token counts (using tiktoken cl100k_base) and a total sum. This is mutually exclusive with `--list-only` / `-l`.
+- WSL path translation now always uses `\\wsl$\<distro>\...` for maximum compatibility (no more `wsl.localhost`).
+- Distro names are sanitized: only illegal UNC characters are replaced with `_`, spaces are allowed.
+
 [Unreleased]: https://github.com/smat-dev/jinni/compare/v0.1.7...HEAD
-[0.1.7]: https://github.com/smat-dev/jinni/releases/tag/v0.1.7 
+[0.1.7]: https://github.com/smat-dev/jinni/releases/tag/v0.1.7
+[0.2.4]: https://github.com/smat-dev/jinni/compare/v0.1.7...v0.2.4 

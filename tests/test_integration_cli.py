@@ -261,3 +261,54 @@ def test_cli_nul_in_path_triggers_valueerror(test_environment: Path):
     with pytest.raises(SystemExit):
         stdout, stderr = run_jinni_cli([bad_path, "--no-copy"])
         assert "Embedded NUL" in stderr or "\x00" in stderr
+
+def test_cli_list_token(test_environment: Path):
+    """Test the --list-token CLI flag."""
+    test_dir = test_environment
+    # Run with the project directory as the root, no specific target
+    stdout, stderr = run_jinni_cli(["-r", str(test_dir), "-L", "--no-copy"])
+
+    # Expected files are the same as test_cli_list_only
+    expected_files_base = sorted([
+        "README.md",
+        "file_root.txt",
+        "main.py",
+        "dir_a/important.log",
+        "dir_b/file_b1.py",
+        "dir_b/sub_dir_b/include_me.txt",
+        "dir_c/file_c1.txt",
+        "dir_d/file_d.txt",
+        "dir_f/file_f.txt",
+        "lib/somelib.py",
+        "src/app.py",
+        "src/nested/deep.py",
+        "src/utils.py",
+        "docs/index.md",
+        "docs/config/options.md",
+        "src/nested/other.txt",
+    ])
+
+    lines = stdout.strip().splitlines()
+    # Check the file lines (ignoring exact token count, just check format)
+    output_files = []
+    total_tokens = 0
+    for line in lines[:-2]: # Exclude separator and total
+        assert ":" in line
+        assert "tokens" in line
+        path_part = line.split(":")[0].strip()
+        token_part = line.split(":")[1].strip().split()[0]
+        output_files.append(path_part)
+        assert token_part.isdigit() # Check token count is a number
+        total_tokens += int(token_part)
+
+    assert sorted(output_files) == expected_files_base
+
+    # Check the separator and total line
+    assert lines[-2] == "---"
+    assert lines[-1].startswith("Total:")
+    assert f"{total_tokens} tokens" in lines[-1]
+
+    # Check stderr contains only the expected INFO log, not errors
+    assert "INFO:jinni.core_logic:Processed" in stderr
+    assert "ERROR" not in stderr
+    assert "WARNING" not in stderr
