@@ -24,19 +24,19 @@ The MCP server can provide as much or as little of the project as desired. By de
 
 # MCP Quickstart
 
-MCP server config for Cursor / Roo / Claude Desktop / client of choice:
+MCP server config file for Cursor / Roo / Claude Desktop / client of choice:
 
 ```json
 {
     "mcpServers": {
-    "jinni": {
-        "command": "uvx jinni-server"
-        // Optionally constrain the server to only read within a tree (recommended for security):
-        // "command": "uvx jinni-server --root /absolute/path/"
-    }
+        "jinni": {
+            "command": "uvx jinni-server"
+        }
     }
 }
 ```
+
+*You can optionally constrain the server to only read within a tree for security in case your LLM goes rogue: add --root /absolute/path/ to the command.*
 
 Install uv if it is not on your system: https://docs.astral.sh/uv/getting-started/installation/
 
@@ -112,14 +112,14 @@ Cursor can silently drop context that is larger than the allowed maximum, so if 
       "mcpServers": {
         "jinni": {
           "command": "uvx jinni-server"
-          // Optionally constrain the server to only read within a tree (recommended for security):
-          // "command": "uvx jinni-server --root /absolute/path/"
         }
       }
     }
     ```
 
-*Consult your specific MCP client's documentation for precise setup steps. Ensure `uv` (for `uvx`) or the correct Python environment (for `python -m`) is accessible. The `usage` tool corresponds to the `jinni usage` CLI command.*
+*You can optionally constrain the server to only read within a tree for security in case your LLM goes rogue: add --root /absolute/path/ to the command.*
+
+*See your specific MCP client's documentation for precise setup steps. Ensure `uv` is installed*
 
 ### Command-Line Utility (`jinni` CLI)
 
