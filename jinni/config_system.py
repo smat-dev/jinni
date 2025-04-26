@@ -65,6 +65,8 @@ DEFAULT_RULES: List[str] = [
     "!*.zipx",
     # OS-specific
     "!Thumbs.db", # Windows thumbnail cache
+    # Legal
+    "!LICENSE",
 ]
 
 def load_rules_from_file(file_path: Path) -> List[str]:
