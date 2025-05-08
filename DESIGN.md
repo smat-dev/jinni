@@ -27,8 +27,8 @@ This document details the internal design of the `jinni` MCP Server, `jinni` CLI
     *   Handles file read errors gracefully (permissions, non-existent files).
 *   **Output Formatting:**
     *   Concatenates file content.
-    *   Prepends metadata headers (path, size, modified time) unless `list_only` is true.
-    *   Uses consistent separators (`========`).
+    *   Prepends a path header (e.g., ````path=src/app.py`) for each file unless `list_only` is true. Content is enclosed in triple backticks.
+    *   Uses consistent separators (`========`) between file entries when not `list_only`. (This separator is still used by `core_logic.py` to join file blocks from `file_processor.py`)
 *   **Large Context Handling:**
     *   Implement a configurable total content size limit (default: 100MB, configurable via `JINNI_MAX_SIZE_MB` env var). Accumulate file sizes during traversal. If the limit is exceeded, **abort** processing and return/print an explanatory error message (e.g., "Error: Total content size exceeds limit of 100MB").
 

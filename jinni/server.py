@@ -48,7 +48,7 @@ async def usage() -> str:
 @server.tool(description=(
     "Reads context from a specified project root directory (absolute path). "
     "Focuses on the specified target files/directories within that root. "
-    "Returns a concatenated string of files with metadata including paths relative to the project root. "
+    "Returns a static view of files with paths relative to the project root. "
     "Assume the user wants to read in context for the whole project unless otherwise specified - "
     "do not ask the user for clarification if just asked to read context. "
     "If the user just says 'jinni', interpret that as read_context. "

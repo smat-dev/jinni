@@ -6,7 +6,12 @@
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@smat-dev/jinni/badge" alt="Jinni: Bring Your Project Into Context MCP server" />
 </a>
 
-Jinni is a tool to efficiently provide Large Language Models the context of your projects. It gives a consolidated view of relevant project files complete with metadata, overcoming the limitations and inefficiencies of reading files one by one.
+Jinni is a tool to efficiently provide Large Language Models the context of your projects. It gives a consolidated view of relevant project files, overcoming the limitations and inefficiencies of reading files one by one. Each file's content is preceded by a simple header indicating its path:
+
+```
+```path=src/app.py
+print("hello")
+```
 
 The philosophy behind this tool is that LLM context windows are large, models are smart, and directly seeing your project best equips the model to help with anything you throw at it.
 
@@ -76,7 +81,7 @@ Cursor can silently drop context that is larger than the allowed maximum, so if 
         *   Define precisely which files/directories to include or exclude using `.gitignore`-style patterns applied to the **relative path**.
         *   Patterns starting with `!` negate the match (an exclusion pattern). (See Configuration section below).
 *   **Large Context Handling:** Aborts with a `DetailedContextSizeError` if the total size of included files exceeds a configurable limit (default: 100MB). The error message includes a list of the 10 largest files contributing to the size, helping you identify candidates for exclusion. See the Troubleshooting section for guidance on managing context size.
-*   **Metadata Headers:** Output includes file path, size, and modification time for each included file (can be disabled with `list_only`).
+*   **Metadata Headers:** Output includes a path header for each included file (e.g., ````path=src/app.py`). This can be disabled with `list_only`.
 *   **Encoding Handling:** Attempts multiple common text encodings (UTF-8, Latin-1, etc.).
 *   **List Only Mode:** Option to only list the relative paths of files that would be included, without their content.
 

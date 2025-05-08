@@ -116,26 +116,26 @@ def test_read_context_no_rules_defaults(test_dir: Path):
     content = run_read_context_helper("project", test_dir.parent) # Root is project, target is None
 
     # Check for files expected to be included (not excluded by defaults)
-    assert "File: README.md" in content
-    assert "File: main.py" in content
-    assert "File: config.yaml" in content
-    assert "File: src/app.py" in content
-    assert "File: src/utils.py" in content
-    assert "File: src/data.json" in content
-    assert "File: src/nested/deep.py" in content
-    assert "File: src/nested/other.txt" in content
-    assert "File: docs/index.md" in content
-    assert "File: docs/config/options.md" in content
-    assert "File: temp.tmp" not in content # Now excluded by default !*.tmp rule
+    assert "```path=README.md" in content
+    assert "```path=main.py" in content
+    assert "```path=config.yaml" in content
+    assert "```path=src/app.py" in content
+    assert "```path=src/utils.py" in content
+    assert "```path=src/data.json" in content
+    assert "```path=src/nested/deep.py" in content
+    assert "```path=src/nested/other.txt" in content
+    assert "```path=docs/index.md" in content
+    assert "```path=docs/config/options.md" in content
+    assert "```path=temp.tmp" not in content # Now excluded by default !*.tmp rule
 
     # Check for files/dirs expected to be excluded by defaults or type
-    assert "File: .env" not in content # Excluded by !.*
-    assert "File: image.jpg" not in content # Binary
-    # assert "File: lib/somelib.py" in content # Included by '*' default, not excluded by others - Assertion added below
-    assert "File: lib/binary.dll" not in content # Binary
-    assert "File: src/.hidden_in_src" not in content # Excluded by !.*
-    assert "File: build/output.bin" not in content # Excluded by !build/
-    assert "File: main_link.py" not in content # Symlink
+    assert "```path=.env" not in content # Excluded by !.*
+    assert "```path=image.jpg" not in content # Binary
+    # assert "```path=lib/somelib.py" in content # Included by '*' default, not excluded by others - Assertion added below
+    assert "```path=lib/binary.dll" not in content # Binary
+    assert "```path=src/.hidden_in_src" not in content # Excluded by !.*
+    assert "```path=build/output.bin" not in content # Excluded by !build/
+    assert "```path=main_link.py" not in content # Symlink
 
 def test_read_context_list_only_defaults(test_dir: Path):
     """Test list_only mode with default exclusions."""
@@ -161,35 +161,35 @@ def test_read_context_include_py_files(test_dir: Path):
     (test_dir / CONTEXT_FILENAME).write_text("**/*.py", encoding='utf-8')
     content = run_read_context_helper("project", test_dir.parent) # Root is project, target is None
 
-    assert "File: main.py" in content
-    assert "File: src/app.py" in content
-    assert "File: src/utils.py" in content
-    assert "File: src/nested/deep.py" in content
-    assert "File: lib/somelib.py" in content # Now included because of rule
+    assert "```path=main.py" in content
+    assert "```path=src/app.py" in content
+    assert "```path=src/utils.py" in content
+    assert "```path=src/nested/deep.py" in content
+    assert "```path=lib/somelib.py" in content # Now included because of rule
 
-    assert "File: README.md" in content # Included by default '*'
-    assert "File: config.yaml" in content # Included by default '*'
-    assert "File: src/data.json" in content # Included by default '*'
+    assert "```path=README.md" in content # Included by default '*'
+    assert "```path=config.yaml" in content # Included by default '*'
+    assert "```path=src/data.json" in content # Included by default '*'
 
 def test_read_context_exclude_overrides_include(test_dir: Path):
     """Test exclusion pattern overriding inclusion in the same file."""
     (test_dir / CONTEXT_FILENAME).write_text("**/*.py\n!src/utils.py", encoding='utf-8') # Corrected path
     content = run_read_context_helper("project", test_dir.parent) # Root is project, target is None
 
-    assert "File: main.py" in content
-    assert "File: src/app.py" in content
-    assert "File: src/nested/deep.py" in content
-    assert "File: lib/somelib.py" in content
-    assert "File: src/utils.py" not in content # Excluded
+    assert "```path=main.py" in content
+    assert "```path=src/app.py" in content
+    assert "```path=src/nested/deep.py" in content
+    assert "```path=lib/somelib.py" in content
+    assert "```path=src/utils.py" not in content # Excluded
 
 def test_read_context_directory_exclusion(test_dir: Path):
     """Test excluding a directory prevents processing files within."""
     (test_dir / CONTEXT_FILENAME).write_text("**/*.py\n!lib/", encoding='utf-8') # Corrected path
     content = run_read_context_helper("project", test_dir.parent) # Root is project, target is None
 
-    assert "File: main.py" in content
-    assert "File: src/app.py" in content
-    assert "File: lib/somelib.py" not in content # Excluded via directory rule
+    assert "```path=main.py" in content
+    assert "```path=src/app.py" in content
+    assert "```path=lib/somelib.py" not in content # Excluded via directory rule
 
 def test_read_context_hierarchy_sub_includes(test_dir: Path):
     """Test sub .contextfiles including files not matched by root."""
@@ -198,11 +198,11 @@ def test_read_context_hierarchy_sub_includes(test_dir: Path):
 
     content = run_read_context_helper("project", test_dir.parent) # Root is project, target is None
 
-    assert "File: README.md" in content
-    assert "File: docs/index.md" in content # Matched by root rule *.md
-    assert "File: src/data.json" in content # Included by sub rule *.json
-    assert "File: main.py" in content # Included by default '*'
-    assert "File: src/app.py" in content # Included by default '*'
+    assert "```path=README.md" in content
+    assert "```path=docs/index.md" in content # Matched by root rule *.md
+    assert "```path=src/data.json" in content # Included by sub rule *.json
+    assert "```path=main.py" in content # Included by default '*'
+    assert "```path=src/app.py" in content # Included by default '*'
 
 def test_read_context_hierarchy_sub_excludes(test_dir: Path):
     """Test sub .contextfiles excluding files matched by root."""
@@ -211,11 +211,11 @@ def test_read_context_hierarchy_sub_excludes(test_dir: Path):
 
     content = run_read_context_helper("project", test_dir.parent) # Root is project, target is None
 
-    assert "File: main.py" in content
-    assert "File: src/utils.py" in content # Included by root, not excluded by sub
-    assert "File: src/nested/deep.py" in content # Included by root
-    assert "File: lib/somelib.py" in content # Included by root
-    assert "File: src/app.py" not in content # Excluded by sub rule
+    assert "```path=main.py" in content
+    assert "```path=src/utils.py" in content # Included by root, not excluded by sub
+    assert "```path=src/nested/deep.py" in content # Included by root
+    assert "```path=lib/somelib.py" in content # Included by root
+    assert "```path=src/app.py" not in content # Excluded by sub rule
 
 def test_read_context_override_rules(test_dir: Path):
     """Test using override rules, ignoring context files."""
@@ -223,24 +223,24 @@ def test_read_context_override_rules(test_dir: Path):
     override = ["src/app.py", "**/*.md", "**/*.py", "src/"] # Use recursive glob for markdown
     content = run_read_context_helper("project", test_dir.parent, override_rules=override) # Root is project, target is None
 
-    assert "File: src/app.py" in content # Included by override
-    assert "File: README.md" in content # Included by override
-    assert "File: docs/index.md" in content # Included by override
-    assert "File: docs/config/options.md" in content # Included by override
+    assert "```path=src/app.py" in content # Included by override
+    assert "```path=README.md" in content # Included by override
+    assert "```path=docs/index.md" in content # Included by override
+    assert "```path=docs/config/options.md" in content # Included by override
 
     # These should NOT be included as overrides replace defaults
-    assert "File: main.py" in content # Included by **/*.py
-    assert "File: src/utils.py" in content # Included by **/*.py
-    assert "File: config.yaml" not in content
+    assert "```path=main.py" in content # Included by **/*.py
+    assert "```path=src/utils.py" in content # Included by **/*.py
+    assert "```path=config.yaml" not in content
 
 def test_read_context_binary_skip(test_dir: Path):
     """Test binary files are skipped even if rules include them."""
     (test_dir / CONTEXT_FILENAME).write_text("*", encoding='utf-8') # Include everything
     content = run_read_context_helper("project", test_dir.parent) # Root is project, target is None
 
-    assert "File: image.jpg" not in content
-    assert "File: lib/binary.dll" not in content
-    assert "File: main.py" in content # Text file still included
+    assert "```path=image.jpg" not in content
+    assert "```path=lib/binary.dll" not in content
+    assert "```path=main.py" in content # Text file still included
 
 def test_read_context_symlink_skip(test_dir: Path):
     """Test symlinks are skipped."""
@@ -249,8 +249,8 @@ def test_read_context_symlink_skip(test_dir: Path):
          pytest.skip("Symlink does not exist, skipping test.")
     (test_dir / CONTEXT_FILENAME).write_text("*.py", encoding='utf-8')
     content = run_read_context_helper("project", test_dir.parent) # Root is project, target is None
-    assert "File: main.py" in content
-    assert "File: main_link.py" not in content
+    assert "```path=main.py" in content
+    assert "```path=main_link.py" not in content
 
 def test_read_context_size_limit_exceeded(test_dir: Path):
     """Test exceeding size limit raises error."""
@@ -265,9 +265,9 @@ def test_read_context_target_file(test_dir: Path):
     # Target main.py directly, root is project
     content = run_read_context_helper(project_root_rel="project", tmp_path=test_dir.parent, target_rel="project/main.py")
     # Rule doesn't apply to target file itself, only binary/size checks
-    assert "File: main.py" in content # Path relative to project root
+    assert "```path=main.py" in content # Path relative to project root
     assert "print('main')" in content
-    assert "File: src/app.py" not in content # Other files not included
+    assert "```path=src/app.py" not in content # Other files not included
 
 def test_read_context_target_dir(test_dir: Path):
     """Test processing a specific target directory within the project root."""
@@ -282,18 +282,18 @@ def test_read_context_target_dir(test_dir: Path):
     # Files inside should be processed relative to the target (src),
     # discovering rules starting from src downwards.
     # Output paths are still relative to the original project root.
-    assert "File: src/app.py" in content
+    assert "```path=src/app.py" in content
     # utils.py should now be INCLUDED because the root rule !**/utils.py is ignored
-    assert "File: src/utils.py" in content
+    assert "```path=src/utils.py" in content
     # data.json should be EXCLUDED by the local src/.contextfiles
-    assert "File: src/data.json" not in content
-    assert "File: src/nested/deep.py" in content
-    assert "File: src/nested/other.txt" in content
+    assert "```path=src/data.json" not in content
+    assert "```path=src/nested/deep.py" in content
+    assert "```path=src/nested/other.txt" in content
     # Hidden file should still be excluded by default rules applied relative to src
-    assert "File: src/.hidden_in_src" not in content
+    assert "```path=src/.hidden_in_src" not in content
     # Files outside target dir src/ should not be included
-    assert "File: main.py" not in content
-    assert "File: README.md" not in content
+    assert "```path=main.py" not in content
+    assert "```path=README.md" not in content
 
 # Test removed as core logic now handles a single effective target path
 # def test_read_context_multiple_targets(test_dir: Path):
@@ -308,8 +308,8 @@ def test_read_context_target_file_relativity(test_dir: Path):
         target_rel="project/src/app.py"
     )
     # Path in header should be relative to project/
-    assert "File: src/app.py" in content
-    assert "File: app.py" not in content
+    assert "```path=src/app.py" in content
+    assert "```path=app.py" not in content
 
 def test_read_context_target_outside_root_error(test_dir: Path):
     """Test providing a target outside the project_root raises ValueError."""

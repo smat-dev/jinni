@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Changed context output header to ````path=<path>` format, followed by file content enclosed in triple backticks, to reduce token usage. Removed size and last modified time from the header.
+
 ### Added
 - WSL path translation now always uses `\\wsl$\<distro>\...` for maximum compatibility (no more `wsl.localhost`).
 - Distro names are sanitized: only illegal UNC characters are replaced with `_`, spaces are allowed.

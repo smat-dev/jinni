@@ -18,24 +18,24 @@ def test_cli_with_contextfiles(test_environment: Path):
     # Defaults exclude: .*, build/, etc.
 
     # Check included content
-    assert "File: file_root.txt" in stdout
+    assert "```path=file_root.txt" in stdout
     assert "Root file content" in stdout
-    assert "File: README.md" in stdout
+    assert "```path=README.md" in stdout
     assert "# Readme" in stdout
-    assert "File: main.py" in stdout # Included by default '*'
-    assert "File: src/app.py" in stdout # Included via root src/
+    assert "```path=main.py" in stdout # Included by default '*'
+    assert "```path=src/app.py" in stdout # Included via root src/
     assert "print('app')" in stdout
-    assert "File: src/utils.py" in stdout # Included via root src/
+    assert "```path=src/utils.py" in stdout # Included via root src/
     assert "def helper(): pass" in stdout
-    assert "File: src/nested/deep.py" in stdout # Included via root src/
+    assert "```path=src/nested/deep.py" in stdout # Included via root src/
     assert "# Deep" in stdout
-    assert "File: dir_a/important.log" in stdout # Included by local override of root !*.log
+    assert "```path=dir_a/important.log" in stdout # Included by local override of root !*.log
     assert "Important Log Content" in stdout
-    assert "File: dir_c/file_c1.txt" in stdout # Included via root dir_c/
+    assert "```path=dir_c/file_c1.txt" in stdout # Included via root dir_c/
     assert "Content C1" in stdout
-    assert "File: dir_f/file_f.txt" in stdout # Included via root dir_f/
-    assert "File: docs/index.md" in stdout # Included via root *.md
-    assert "File: docs/config/options.md" in stdout # Included via root *.md
+    assert "```path=dir_f/file_f.txt" in stdout # Included via root dir_f/
+    assert "```path=docs/index.md" in stdout # Included via root *.md
+    assert "```path=docs/config/options.md" in stdout # Included via root *.md
 
     # Check excluded content
     assert "root.log" not in stdout # Excluded by root !*.log
@@ -45,15 +45,15 @@ def test_cli_with_contextfiles(test_environment: Path):
     assert "dir_a/file_a1.txt" not in stdout # Excluded locally by !file_a1.txt
     assert "dir_a/file_a2.log" not in stdout # Excluded by root !*.log
     assert "dir_a/local.md" not in stdout # Excluded locally by !local.md
-    assert "File: dir_b/file_b1.py" in stdout # dir_b included by default '*'
-    assert "File: dir_b/sub_dir_b/include_me.txt" in stdout # dir_b included by default '*'
+    assert "```path=dir_b/file_b1.py" in stdout # dir_b included by default '*'
+    assert "```path=dir_b/sub_dir_b/include_me.txt" in stdout # dir_b included by default '*'
     assert "dir_c/file_c2.data" not in stdout # Excluded locally by !*.data
-    assert "File: dir_d/file_d.txt" in stdout # dir_d included by default '*'
+    assert "```path=dir_d/file_d.txt" in stdout # dir_d included by default '*'
     assert "dir_e/last_rule.txt" not in stdout # Excluded locally by !last_rule.txt
     assert "src/config.log" not in stdout # Excluded by root !*.log
     assert "src/nested/data.log" not in stdout # Excluded by root !*.log
     assert ".hidden_dir" not in stdout # Excluded by default .*
-    assert ".contextfiles" not in stdout # Excluded by default .*
+    assert "```path=.contextfiles" not in stdout # Excluded by default .*
     assert "build/" not in stdout # Excluded by default build/
 
     assert stderr.strip() == ""
@@ -107,20 +107,20 @@ def test_cli_overrides(test_environment: Path): # Renamed from test_cli_global_c
     # Defaults exclude: .*, build/, etc.
 
     # Check included
-    assert "File: README.md" in stdout # Included by override
-    assert "File: src/app.py" in stdout # Included by override **/*.py
-    assert "File: src/utils.py" in stdout # Included by override **/*.py
-    assert "File: src/nested/deep.py" in stdout # Included by override **/*.py
-    assert "File: dir_b/file_b1.py" in stdout # Included by override **/*.py and dir_b/
-    assert "File: lib/somelib.py" in stdout # Included by override **/*.py (and lib/ inclusion)
+    assert "```path=README.md" in stdout # Included by override
+    assert "```path=src/app.py" in stdout # Included by override **/*.py
+    assert "```path=src/utils.py" in stdout # Included by override **/*.py
+    assert "```path=src/nested/deep.py" in stdout # Included by override **/*.py
+    assert "```path=dir_b/file_b1.py" in stdout # Included by override **/*.py and dir_b/
+    assert "```path=lib/somelib.py" in stdout # Included by override **/*.py (and lib/ inclusion)
 
     # Check excluded
-    assert "File: main.py" not in stdout # Excluded by override !main.py
-    assert "File: file_root.txt" not in stdout # Excluded because .contextfiles are ignored by overrides
-    assert "File: dir_a/important.log" not in stdout # Excluded because .contextfiles are ignored by overrides
-    assert "File: dir_c/file_c1.txt" not in stdout # Excluded because .contextfiles are ignored by overrides
-    assert "File: dir_f/file_f.txt" not in stdout # Excluded because .contextfiles are ignored by overrides
-    assert "File: docs/index.md" not in stdout # Excluded because .contextfiles are ignored by overrides
+    assert "```path=main.py" not in stdout # Excluded by override !main.py
+    assert "```path=file_root.txt" not in stdout # Excluded because .contextfiles are ignored by overrides
+    assert "```path=dir_a/important.log" not in stdout # Excluded because .contextfiles are ignored by overrides
+    assert "```path=dir_c/file_c1.txt" not in stdout # Excluded because .contextfiles are ignored by overrides
+    assert "```path=dir_f/file_f.txt" not in stdout # Excluded because .contextfiles are ignored by overrides
+    assert "```path=docs/index.md" not in stdout # Excluded because .contextfiles are ignored by overrides
     assert "config.yaml" not in stdout # Not included by override rules
     assert ".env" not in stdout # Excluded by default
     assert "build/" not in stdout # Excluded by default
@@ -157,9 +157,9 @@ def test_cli_debug_explain(test_environment: Path):
     assert "Keeping Directory: " in stderr and "dir_b" in stderr and "Context files at root" in stderr # Kept because included by default '*' at root (Corrected assertion)
 
     # Check stdout is still correct (same as test_cli_with_contextfiles)
-    assert "File: file_root.txt" in stdout
-    assert "File: src/app.py" in stdout
-    assert "File: dir_b/file_b1.py" in stdout # Should be included by default '*'
+    assert "```path=file_root.txt" in stdout
+    assert "```path=src/app.py" in stdout
+    assert "```path=dir_b/file_b1.py" in stdout # Should be included by default '*'
 
 # Test removed as CLI now takes only one optional target
 # def test_cli_multi_path_input(test_environment: Path):
@@ -174,16 +174,16 @@ def test_cli_project_root(test_environment: Path):
 
     # Run with project root set to test_dir, target is src/app.py
     stdout_root, _ = run_jinni_cli(["-r", str(test_dir), str(test_dir / "src/app.py")])
-    assert "File: src/app.py" in stdout_root # Relative to root
+    assert "```path=src/app.py" in stdout_root # Relative to root
 
     # Run with project root set to test_dir/src, target is app.py (relative to CWD, resolves inside root)
     stdout_src, _ = run_jinni_cli(["-r", str(test_dir / "src"), str(test_dir / "src" / "app.py")]) # Pass absolute path for target
-    assert "File: app.py" in stdout_src # Relative to root (which is src)
-    assert "File: src/app.py" not in stdout_src
+    assert "```path=app.py" in stdout_src # Relative to root (which is src)
+    assert "```path=src/app.py" not in stdout_src
 
     # Run with project root set to test_dir.parent, target is project/src/app.py
     stdout_parent, _ = run_jinni_cli(["-r", str(test_dir.parent), str(test_dir / "src/app.py")])
-    assert f"File: {test_dir.name}/src/app.py" in stdout_parent # Relative to root (parent)
+    assert f"```path={test_dir.name}/src/app.py" in stdout_parent # Relative to root (parent)
 
 
 def test_cli_target_dir_ignores_parent_rules(test_environment: Path):
@@ -207,18 +207,18 @@ def test_cli_target_dir_ignores_parent_rules(test_environment: Path):
     # - .hidden_in_src (excluded by default !.* relative to src)
 
     # Check included
-    assert "File: src/app.py" in stdout
-    assert "File: src/utils.py" in stdout # Should be included now
-    assert "File: src/nested/deep.py" in stdout
-    assert "File: src/nested/other.txt" in stdout
+    assert "```path=src/app.py" in stdout
+    assert "```path=src/utils.py" in stdout # Should be included now
+    assert "```path=src/nested/deep.py" in stdout
+    assert "```path=src/nested/other.txt" in stdout
 
     # Check excluded
-    assert "File: src/data.json" not in stdout # Excluded by local rule
-    assert "File: src/.hidden_in_src" not in stdout # Excluded by default rule relative to src
+    assert "```path=src/data.json" not in stdout # Excluded by local rule
+    assert "```path=src/.hidden_in_src" not in stdout # Excluded by default rule relative to src
 
     # Check files outside target are not included
-    assert "File: main.py" not in stdout
-    assert "File: README.md" not in stdout
+    assert "```path=main.py" not in stdout
+    assert "```path=README.md" not in stdout
 
     # assert stderr.strip() == "" # Removed assertion as debug logs are expected
 
@@ -237,15 +237,15 @@ def test_cli_target_dot_directory(test_environment: Path):
     # - .nope (excluded by default '!.*' rule applied within .testdir)
 
     # Check included
-    assert f"File: {target_dot_dir.name}/yes" in stdout # Path relative to root
+    assert f"```path={target_dot_dir.name}/yes" in stdout # Path relative to root
     assert "it worked" in stdout
 
     # Check excluded
-    assert f"File: {target_dot_dir.name}/.nope" not in stdout
+    assert f"```path={target_dot_dir.name}/.nope" not in stdout
 
     # Check files outside target are not included
-    assert "File: main.py" not in stdout
-    assert "File: README.md" not in stdout
+    assert "```path=main.py" not in stdout
+    assert "```path=README.md" not in stdout
 
     assert stderr.strip() == ""
 

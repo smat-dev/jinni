@@ -28,24 +28,24 @@ async def test_mcp_read_context_basic(test_environment: Path):
     # Defaults exclude: .*, build/, etc.
 
     # Check included content
-    assert "File: file_root.txt" in stdout_text
-    assert "File: README.md" in stdout_text
-    assert "File: main.py" in stdout_text # Included by default '*'
-    assert "File: src/app.py" in stdout_text # Included via root src/
-    assert "File: src/utils.py" in stdout_text # Included via root src/
-    assert "File: src/nested/deep.py" in stdout_text # Included via root src/
-    assert "File: dir_a/important.log" in stdout_text # Included by local override of root !*.log
-    assert "File: dir_c/file_c1.txt" in stdout_text # Included via root dir_c/
-    assert "File: dir_f/file_f.txt" in stdout_text # Included via root dir_f/
-    assert "File: docs/index.md" in stdout_text # Included via root *.md
-    assert "File: docs/config/options.md" in stdout_text # Included via root *.md
+    assert "```path=file_root.txt" in stdout_text
+    assert "```path=README.md" in stdout_text
+    assert "```path=main.py" in stdout_text # Included by default '*'
+    assert "```path=src/app.py" in stdout_text # Included via root src/
+    assert "```path=src/utils.py" in stdout_text # Included via root src/
+    assert "```path=src/nested/deep.py" in stdout_text # Included via root src/
+    assert "```path=dir_a/important.log" in stdout_text # Included by local override of root !*.log
+    assert "```path=dir_c/file_c1.txt" in stdout_text # Included via root dir_c/
+    assert "```path=dir_f/file_f.txt" in stdout_text # Included via root dir_f/
+    assert "```path=docs/index.md" in stdout_text # Included via root *.md
+    assert "```path=docs/config/options.md" in stdout_text # Included via root *.md
 
     # Check excluded content
     assert "root.log" not in stdout_text # Excluded by root !*.log
     assert "temp.tmp" not in stdout_text # Excluded by root !*.tmp
     assert "dir_a/file_a1.txt" not in stdout_text # Excluded locally by !file_a1.txt
-    assert "File: dir_b/file_b1.py" in stdout_text # Included by default '*'
-    assert "File: dir_d/file_d.txt" in stdout_text # Included by default '*'
+    assert "```path=dir_b/file_b1.py" in stdout_text # Included by default '*'
+    assert "```path=dir_d/file_d.txt" in stdout_text # Included by default '*'
     assert "dir_e/last_rule.txt" not in stdout_text # Excluded locally by !last_rule.txt
     assert "build/" not in stdout_text # Excluded by default
 
@@ -105,16 +105,16 @@ async def test_mcp_read_context_inline_rules(test_environment: Path):
     stdout_text = result.content[0].text
 
     # Assertions based on inline rules (override) + defaults:
-    assert "File: main.py" in stdout_text # Included by inline **/*.py
-    assert "File: src/utils.py" in stdout_text # Included by inline **/*.py
-    assert "File: src/nested/deep.py" in stdout_text # Included by inline **/*.py
-    assert "File: lib/somelib.py" in stdout_text # Included by inline **/*.py
+    assert "```path=main.py" in stdout_text # Included by inline **/*.py
+    assert "```path=src/utils.py" in stdout_text # Included by inline **/*.py
+    assert "```path=src/nested/deep.py" in stdout_text # Included by inline **/*.py
+    assert "```path=lib/somelib.py" in stdout_text # Included by inline **/*.py
 
-    assert "File: src/app.py" not in stdout_text # Excluded by inline !src/app.py
+    assert "```path=src/app.py" not in stdout_text # Excluded by inline !src/app.py
     # Check files included by root file rules are NOT included now unless matched by inline *.py
-    assert "File: file_root.txt" not in stdout_text # Excluded because .contextfiles are ignored by inline rules
-    assert "File: README.md" not in stdout_text # Excluded because .contextfiles are ignored by inline rules
-    assert "dir_a/important.log" not in stdout_text # .contextfiles ignored
+    assert "```path=file_root.txt" not in stdout_text # Excluded because .contextfiles are ignored by inline rules
+    assert "```path=README.md" not in stdout_text # Excluded because .contextfiles are ignored by inline rules
+    assert "```path=dir_a/important.log" not in stdout_text # .contextfiles ignored
 
 
 @pytest.mark.asyncio
@@ -134,9 +134,9 @@ async def test_mcp_debug_explain(test_environment: Path):
     assert len(result.content) == 1 and isinstance(result.content[0], types.TextContent)
     stdout_text = result.content[0].text
     # Basic check for some expected content
-    assert "File: file_root.txt" in stdout_text
-    assert "File: src/app.py" in stdout_text
-    assert "File: dir_b/file_b1.py" in stdout_text # dir_b included by default rules
+    assert "```path=file_root.txt" in stdout_text
+    assert "```path=src/app.py" in stdout_text
+    assert "```path=dir_b/file_b1.py" in stdout_text # dir_b included by default rules
 
 @pytest.mark.asyncio
 async def test_mcp_read_context_target_file(test_environment: Path):
@@ -154,11 +154,11 @@ async def test_mcp_read_context_target_file(test_environment: Path):
     stdout_text = result.content[0].text
 
     # Should only contain the targeted file (as it's explicitly targeted)
-    assert "File: src/app.py" in stdout_text # Path relative to project_root
+    assert "```path=src/app.py" in stdout_text # Path relative to project_root
     assert "print('app')" in stdout_text
     # Ensure no other files are present
-    assert "File: main.py" not in stdout_text
-    assert "File: README.md" not in stdout_text
+    assert "```path=main.py" not in stdout_text
+    assert "```path=README.md" not in stdout_text
 
 
 @pytest.mark.asyncio
@@ -179,13 +179,13 @@ async def test_mcp_read_context_target_list_files(test_environment: Path):
     stdout_text = result.content[0].text
 
     # Should contain only the targeted files
-    assert "File: src/app.py" in stdout_text # Path relative to project_root
+    assert "```path=src/app.py" in stdout_text # Path relative to project_root
     assert "print('app')" in stdout_text
-    assert "File: README.md" in stdout_text
+    assert "```path=README.md" in stdout_text
     assert "# Readme" in stdout_text # Corrected content check
     # Ensure no other files are present
-    assert "File: main.py" not in stdout_text
-    assert "File: file_root.txt" not in stdout_text
+    assert "```path=main.py" not in stdout_text
+    assert "```path=file_root.txt" not in stdout_text
 
 
 @pytest.mark.asyncio
@@ -207,19 +207,19 @@ async def test_mcp_read_context_target_list_mixed(test_environment: Path):
 
     # Should contain the targeted file and files within the targeted directory
     # respecting default exclusions within that directory
-    assert "File: file_root.txt" in stdout_text
+    assert "```path=file_root.txt" in stdout_text
     assert "Root file content" in stdout_text # Corrected content check again
-    assert "File: src/app.py" in stdout_text
+    assert "```path=src/app.py" in stdout_text
     assert "print('app')" in stdout_text
-    assert "File: src/utils.py" in stdout_text
+    assert "```path=src/utils.py" in stdout_text
     assert "def helper(): pass" in stdout_text # Corrected content check for utils.py
-    assert "File: src/nested/deep.py" in stdout_text
+    assert "```path=src/nested/deep.py" in stdout_text
     assert "# Deep" in stdout_text # Corrected content check for deep.py
     # Ensure hidden file in src is still excluded by default rules
     assert ".hidden_in_src" not in stdout_text
     # Ensure files outside the targets are not present
-    assert "File: main.py" not in stdout_text
-    assert "File: README.md" not in stdout_text
+    assert "```path=main.py" not in stdout_text
+    assert "```path=README.md" not in stdout_text
 
 
 @pytest.mark.asyncio
@@ -254,18 +254,18 @@ async def test_mcp_target_dir_ignores_parent_rules(test_environment: Path):
     # - .hidden_in_src (excluded by default !.* relative to src)
 
     # Check included
-    assert "File: src/app.py" in stdout_text
-    assert "File: src/utils.py" in stdout_text # Should be included now
-    assert "File: src/nested/deep.py" in stdout_text
-    assert "File: src/nested/other.txt" in stdout_text
+    assert "```path=src/app.py" in stdout_text
+    assert "```path=src/utils.py" in stdout_text # Should be included now
+    assert "```path=src/nested/deep.py" in stdout_text
+    assert "```path=src/nested/other.txt" in stdout_text
 
     # Check excluded
-    assert "File: src/data.json" not in stdout_text # Excluded by local rule
-    assert "File: src/.hidden_in_src" not in stdout_text # Excluded by default rule relative to src
+    assert "```path=src/data.json" not in stdout_text # Excluded by local rule
+    assert "```path=src/.hidden_in_src" not in stdout_text # Excluded by default rule relative to src
 
     # Check files outside target are not included
-    assert "File: main.py" not in stdout_text
-    assert "File: README.md" not in stdout_text
+    assert "```path=main.py" not in stdout_text
+    assert "```path=README.md" not in stdout_text
 
 
 @pytest.mark.asyncio
@@ -282,10 +282,9 @@ async def test_mcp_read_context_target_list_empty_defaults_to_root(test_environm
     assert len(result.content) == 1 and isinstance(result.content[0], types.TextContent)
     stdout_text = result.content[0].text
     # Assertions should match the basic test (processing the root)
-    assert "File: file_root.txt" in stdout_text
-    assert "File: README.md" in stdout_text
-    assert "File: main.py" in stdout_text
-
+    assert "```path=file_root.txt" in stdout_text
+    assert "```path=README.md" in stdout_text
+    assert "```path=main.py" in stdout_text
 
 
 @pytest.mark.asyncio

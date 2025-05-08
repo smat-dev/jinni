@@ -105,13 +105,9 @@ def process_file(
                 logger.warning(f"Could not decode file {file_path} using {encodings_to_try}. Skipping content.")
                 return None, 0
 
-            header = (
-                f"File: {relative_path_str}\n"
-                f"Size: {actual_file_size} bytes\n"
-                f"Last Modified: {file_info['last_modified']}\n"
-                f"{'=' * 80}\n"
-            )
-            formatted_output = header + "\n" + content
+            # New header format
+            header = f"```path={relative_path_str}"
+            formatted_output = header + "\n" + content + "\n```\n" # Add closing backticks
             if debug_explain: logger.debug(f"Adding content for: {relative_path_str}")
             return formatted_output, actual_file_size
 
