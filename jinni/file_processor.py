@@ -15,9 +15,6 @@ logger = logging.getLogger("jinni.file_processor")
 if not logger.handlers and not logging.getLogger().handlers:
      logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-# Constants might be moved to a central place later
-SEPARATOR = "\n\n"  # Blank line between file entries
-
 def process_file(
     file_path: Path,
     output_rel_root: Path,
