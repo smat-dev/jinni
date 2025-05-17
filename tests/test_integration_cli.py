@@ -138,9 +138,9 @@ def test_cli_debug_explain(test_environment: Path):
     # Check stderr for expected explanation patterns (may need adjustment based on exact logging)
     # Look for dynamic spec source descriptions
     assert "DEBUG:jinni.context_walker:Compiled spec for" in stderr # Check for log from context_walker
-    assert "from Context files at root" in stderr # Root context (Updated assertion)
-    assert "from Context files up to ./src" in stderr # Src context
-    assert "from Context files up to ./dir_a" in stderr # Dir_a context
+    assert "from Gitignore+context files at root" in stderr  # Root context
+    assert "from Gitignore+context files up to ./src" in stderr  # Src context
+    assert "from Gitignore+context files up to ./dir_a" in stderr  # Dir_a context
 
     # Check specific inclusion/exclusion reasons based on the dynamic context
     # Check for the log message from the context walker module
@@ -149,12 +149,12 @@ def test_cli_debug_explain(test_environment: Path):
     assert "DEBUG:jinni.context_walker:Pruning Directory" in stderr # Check context_walker logger
 
     # Example specific checks (adapt based on actual log output)
-    assert "Including File: " in stderr and "file_root.txt" in stderr and "Context files at root" in stderr # Corrected assertion
-    assert "Excluding File: " in stderr and "root.log" in stderr and "Context files at root" in stderr # Excluded by root !*.log (Corrected assertion)
-    assert "Including File: " in stderr and "src/app.py" in stderr and "Context files up to ./src" in stderr # Included by root src/
-    assert "Excluding File: " in stderr and "dir_a/file_a1.txt" in stderr and "Context files up to ./dir_a" in stderr # Excluded by dir_a !file_a1.txt
-    assert "Including File: " in stderr and "dir_a/important.log" in stderr and "Context files up to ./dir_a" in stderr # Included by dir_a important.log
-    assert "Keeping Directory: " in stderr and "dir_b" in stderr and "Context files at root" in stderr # Kept because included by default '*' at root (Corrected assertion)
+    assert "Including File: " in stderr and "file_root.txt" in stderr and "Gitignore+context files at root" in stderr
+    assert "Excluding File: " in stderr and "root.log" in stderr and "Gitignore+context files at root" in stderr
+    assert "Including File: " in stderr and "src/app.py" in stderr and "Gitignore+context files up to ./src" in stderr
+    assert "Excluding File: " in stderr and "dir_a/file_a1.txt" in stderr and "Gitignore+context files up to ./dir_a" in stderr
+    assert "Including File: " in stderr and "dir_a/important.log" in stderr and "Gitignore+context files up to ./dir_a" in stderr
+    assert "Keeping Directory: " in stderr and "dir_b" in stderr and "Gitignore+context files at root" in stderr
 
     # Check stdout is still correct (same as test_cli_with_contextfiles)
     assert "```path=file_root.txt" in stdout

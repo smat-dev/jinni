@@ -15,11 +15,12 @@ except ImportError:
 # Import necessary components from other modules
 from .config_system import (
     load_rules_from_file,
+    load_gitignore_as_context_rules,
     compile_spec_from_rules,
     DEFAULT_RULES,
     CONTEXT_FILENAME,
 )
-from .utils import _find_context_files_for_dir # Assuming utils.py exists
+from .utils import _find_context_files_for_dir, _find_gitignore_files_for_dir
 from .file_processor import process_file # Assuming file_processor.py exists
 from .exceptions import ContextSizeExceededError # Assuming exceptions.py exists
 
@@ -99,19 +100,28 @@ def walk_and_process(
         else:
             # Discover rules starting from walk_target_path downwards
             context_files_in_path = _find_context_files_for_dir(current_dir_path, walk_target_path)
-            if debug_explain: logger.debug(f"Found context files for {current_dir_path} (relative to {walk_target_path}): {context_files_in_path}")
+            gitignore_files_in_path = _find_gitignore_files_for_dir(current_dir_path, walk_target_path)
+            if debug_explain:
+                logger.debug(f"Found context files for {current_dir_path} (relative to {walk_target_path}): {context_files_in_path}")
+                logger.debug(f"Found gitignore files for {current_dir_path} (relative to {walk_target_path}): {gitignore_files_in_path}")
 
-            # Combine default rules and rules from discovered files
-            current_rules = list(DEFAULT_RULES) # Start with defaults
+            # Combine default rules, gitignore rules, and rules from discovered files
+            current_rules = list(DEFAULT_RULES)  # Start with defaults
+            for gi_path in gitignore_files_in_path:
+                current_rules.extend(load_gitignore_as_context_rules(gi_path))
             for cf_path in context_files_in_path:
                 current_rules.extend(load_rules_from_file(cf_path))
 
             # Compile spec for this specific directory context
             try:
                 relative_dir_desc = current_dir_path.relative_to(walk_target_path)
-                spec_source_desc = f"Context files up to ./{relative_dir_desc}" if str(relative_dir_desc) != '.' else "Context files at root (relative to target)"
+                spec_source_desc = (
+                    f"Gitignore+context files up to ./{relative_dir_desc}"
+                    if str(relative_dir_desc) != '.'
+                    else "Gitignore+context files at root (relative to target)"
+                )
             except ValueError:
-                spec_source_desc = f"Context files up to {current_dir_path}" # Fallback if current_dir is somehow outside walk_target_path
+                spec_source_desc = f"Gitignore+context files up to {current_dir_path}"  # Fallback if current_dir is outside walk_target_path
 
             if debug_explain:
                 logger.debug(f"Combined rules for {current_dir_path}: {current_rules}") # Log the combined rules list

@@ -30,6 +30,7 @@ from .config_system import (
     compile_spec_from_rules, # Needed by get_large_files
     DEFAULT_RULES,           # Needed by get_large_files
     CONTEXT_FILENAME,        # Needed by _find_context_files_for_dir
+    GITIGNORE_FILENAME,      # Needed by _find_gitignore_files_for_dir
 )
 
 # Setup logger for this module
@@ -497,6 +498,35 @@ def _find_context_files_for_dir(dir_path: Path, root_path: Path) -> List[Path]:
             logger.debug(f"Found context file: {context_file}")
 
     return context_files
+
+def _find_gitignore_files_for_dir(dir_path: Path, root_path: Path) -> List[Path]:
+    """Finds all .gitignore files from root_path down to dir_path."""
+    gitignore_files = []
+    current = dir_path.resolve()
+    root = root_path.resolve()
+
+    if not (current == root or root in current.parents):
+         logger.warning(f"Directory {current} is not within the root {root}. Cannot find gitignore files.")
+         return []
+
+    paths_to_check = []
+    temp_path = current
+    while temp_path >= root:
+        paths_to_check.append(temp_path)
+        if temp_path == root:
+            break
+        parent = temp_path.parent
+        if parent == temp_path:
+            break
+        temp_path = parent
+
+    for p in reversed(paths_to_check):
+        ignore_file = p / GITIGNORE_FILENAME
+        if ignore_file.is_file():
+            gitignore_files.append(ignore_file)
+            logger.debug(f"Found gitignore file: {ignore_file}")
+
+    return gitignore_files
 
 # --- WSL Path Translation Helper ---
 
