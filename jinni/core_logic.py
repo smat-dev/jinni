@@ -42,7 +42,7 @@ if not logger.handlers and not logging.getLogger().handlers:
 # --- Constants ---
 DEFAULT_SIZE_LIMIT_MB = 100
 ENV_VAR_SIZE_LIMIT = 'JINNI_MAX_SIZE_MB'
-SEPARATOR = "\n\n" + "=" * 80 + "\n"
+SEPARATOR = "\n\n"  # Blank line between file entries
 
 # --- Main Processing Function ---
 def read_context(
