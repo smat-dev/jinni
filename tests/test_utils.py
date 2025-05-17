@@ -363,6 +363,19 @@ def test_find_context_files_helper(test_dir: Path):
     files = _find_context_files_for_dir(root.parent, root)
     assert files == []
 
+def test_gitignore_respected_and_overridden(test_dir: Path):
+    """Ensure .gitignore excludes files unless overridden by .contextfiles."""
+    (test_dir / ".gitignore").write_text("lib/\n", encoding="utf-8")
+
+    # Without context override, lib/ should be excluded
+    content = run_read_context_helper("project", test_dir.parent)
+    assert "```path=lib/somelib.py" not in content
+
+    # Add context file that re-includes lib/
+    (test_dir / CONTEXT_FILENAME).write_text("lib/\n", encoding="utf-8")
+    content = run_read_context_helper("project", test_dir.parent)
+    assert "```path=lib/somelib.py" in content
+
 # Test removed as project_root is now mandatory
 # def test_read_context_project_root_default(test_dir: Path):
 

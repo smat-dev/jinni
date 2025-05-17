@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic fallback for WSL path translation on Windows when `wslpath` is unavailable. Jinni now attempts to determine the default distro using `wsl -l -q` and constructs the UNC path (`\\wsl$\...`) manually.
 - Environment variable `JINNI_ASSUME_WSL_DISTRO` allows overriding the automatically detected default distro for the manual fallback.
 - Added support for stripping `vscode-remote://wsl.localhost/Distro/...` URIs to `/...` on non-Windows platforms.
+- Context gathering now respects `.gitignore` files (lower priority than `.contextfiles`).
 
 ### Changed
 - If you install WSL while Jinni is running, restart Jinni to pick up the new `wslpath`.

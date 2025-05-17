@@ -20,6 +20,7 @@ if not logger.handlers:
 
 # --- Constants ---
 CONTEXT_FILENAME = ".contextfiles"
+GITIGNORE_FILENAME = ".gitignore"
 
 # Intent is general inclusions/exclusions for context in a wide range of projects
 DEFAULT_RULES: List[str] = [
@@ -86,6 +87,22 @@ def load_rules_from_file(file_path: Path) -> List[str]:
     except Exception as e:
         logger.warning(f"Could not read rule file {file_path}: {e}")
         return []
+
+def load_gitignore_as_context_rules(file_path: Path) -> List[str]:
+    """Load .gitignore rules and convert to Jinni-style context rules."""
+    raw_lines = load_rules_from_file(file_path)
+    converted: List[str] = []
+    for line in raw_lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            continue
+        if stripped.startswith('!'):
+            # Git's negation means include; keep without '!'
+            converted.append(stripped[1:])
+        else:
+            # Regular gitignore entry is an exclusion -> prefix '!'
+            converted.append('!' + stripped)
+    return converted
 
 def compile_spec_from_rules(rules: Iterable[str], source_description: str = "rules list") -> pathspec.PathSpec:
     """
