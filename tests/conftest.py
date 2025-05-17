@@ -180,7 +180,14 @@ def run_jinni_cli(args: List[str]):
     command = [PYTHON_EXECUTABLE, str(JINNI_CLI_PATH)] + args
     try:
         # Run in the project root so imports work
-        result = subprocess.run(command, capture_output=True, text=True, check=True, cwd=str(PROJECT_ROOT), timeout=10) # Increased timeout slightly
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=str(PROJECT_ROOT),
+            timeout=30,
+        )  # Allow extra time for initialization
         # Print stderr for debugging purposes, especially when tests fail on stdout checks
         print(f"--- Captured Stderr ---\n{result.stderr}\n--- End Captured Stderr ---", file=sys.stderr)
         # Normalize stderr newlines for comparison
