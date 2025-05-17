@@ -113,11 +113,13 @@ def handle_list_token_command(args):
 
         # Initialize tiktoken encoder
         try:
-            # Using cl100k_base as it's common for gpt-4, gpt-3.5-turbo, text-embedding-ada-002
+            # Using cl100k_base as it's common for gpt-4 and related models
             enc = tiktoken.get_encoding("cl100k_base")
         except Exception as e:
-            print(f"Error initializing tiktoken encoder: {e}", file=sys.stderr)
-            sys.exit(1)
+            logger.info(
+                "tiktoken unavailable, using naive token count: %s", e
+            )
+            enc = None
 
         total_tokens = 0
         output_lines = []
@@ -146,8 +148,10 @@ def handle_list_token_command(args):
                     output_lines.append(f"{rel_path_str}: Error decoding")
                     continue
 
-                # Count tokens
-                num_tokens = len(enc.encode(content_str))
+                # Count tokens (fallback to word count if tiktoken unavailable)
+                num_tokens = (
+                    len(enc.encode(content_str)) if enc else len(content_str.split())
+                )
                 total_tokens += num_tokens
                 output_lines.append(f"{rel_path_str}: {num_tokens} tokens")
 
