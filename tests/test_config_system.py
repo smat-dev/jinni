@@ -8,8 +8,9 @@ import pathspec # Direct import, assume it's installed
 from jinni.config_system import (
     load_rules_from_file,
     compile_spec_from_rules,
-    DEFAULT_RULES, # Import to potentially check its content or use in tests
-    CONTEXT_FILENAME
+    load_gitignore_as_context_rules,
+    DEFAULT_RULES,  # Import to potentially check its content or use in tests
+    CONTEXT_FILENAME,
 )
 
 # --- Tests for load_rules_from_file ---
@@ -127,6 +128,35 @@ def test_default_rules_compilation():
     assert not spec.match_file("__pycache__/some.cpython-39.pyc")
     # Check something not excluded by default
     assert spec.match_file("src/main.py") # Defaults include '*' first, so this should be included
+
+
+def test_load_gitignore_as_context_rules_spaces_and_comments(tmp_path: Path):
+    """Ensure gitignore lines are converted with spaces preserved and comments ignored."""
+    gi_file = tmp_path / ".gitignore"
+    gi_file.write_text(
+        "\n".join(
+            [
+                "# a comment",
+                "foo.py",
+                "!bar.py",
+                " baz.txt",
+                "trail.txt   ",
+                "\\#literal",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    rules = load_gitignore_as_context_rules(gi_file)
+
+    assert rules == [
+        "!foo.py",
+        "bar.py",
+        "! baz.txt",
+        "!trail.txt   ",
+        "!\\#literal",
+    ]
 
 # --- Remove tests for check_item and find_and_compile_contextfile ---
 # All tests below this line from the original file are removed.
