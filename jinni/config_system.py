@@ -93,15 +93,18 @@ def load_gitignore_as_context_rules(file_path: Path) -> List[str]:
     raw_lines = load_rules_from_file(file_path)
     converted: List[str] = []
     for line in raw_lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith('#'):
+        # Preserve leading/trailing spaces (except final newline) to mimic
+        # gitignore semantics. Comments only apply when the very first
+        # character is '#'.
+        line_no_nl = line.rstrip("\n")
+        if line_no_nl == "" or line_no_nl.startswith("#"):
             continue
-        if stripped.startswith('!'):
+        if line_no_nl.startswith("!"):
             # Git's negation means include; keep without '!'
-            converted.append(stripped[1:])
+            converted.append(line_no_nl[1:])
         else:
             # Regular gitignore entry is an exclusion -> prefix '!'
-            converted.append('!' + stripped)
+            converted.append("!" + line_no_nl)
     return converted
 
 def compile_spec_from_rules(rules: Iterable[str], source_description: str = "rules list") -> pathspec.PathSpec:
