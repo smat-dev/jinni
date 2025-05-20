@@ -21,7 +21,7 @@ from .config_system import (
     CONTEXT_FILENAME,
 )
 from .utils import _find_context_files_for_dir, _find_gitignore_files_for_dir
-from .file_processor import process_file # Assuming file_processor.py exists
+from .file_processor import process_file, summarize_file # Assuming file_processor.py exists
 from .exceptions import ContextSizeExceededError # Assuming exceptions.py exists
 
 # Setup logger for this module
@@ -38,8 +38,10 @@ def walk_and_process(
     size_limit_bytes: int,
     list_only: bool,
     include_size_in_list: bool,
-    debug_explain: bool
-) -> Tuple[List[str], int, Set[Path]]:
+    debug_explain: bool,
+    summarize: bool = False, # New parameter for summarization
+    cache_data: Optional[dict] = None # New parameter for cache
+) -> Tuple[List[str], int, Set[Path], bool]:
     """
     Walks a directory, applies rules, processes files, and returns results.
 
@@ -69,6 +71,7 @@ def walk_and_process(
     output_parts: List[str] = []
     processed_files_set: Set[Path] = set()
     total_size_bytes: int = 0
+    summary_cache_modified_in_walk: bool = False
 
     if debug_explain:
         try:
@@ -239,30 +242,72 @@ def walk_and_process(
                 continue
 
             # --- Passed Rule Check ---
-            # Call file processor
+            # Call file processor or summarizer
             try:
-                file_output, file_size_added = process_file(
-                    file_path=file_path,
-                    output_rel_root=output_rel_root,
-                    size_limit_bytes=size_limit_bytes,
-                    total_size_bytes=total_size_bytes,
-                    list_only=list_only,
-                    include_size_in_list=include_size_in_list,
-                    debug_explain=debug_explain
-                )
+                file_output_content: Optional[str] = None
+                current_file_size_added: int = 0
+                
+                # Calculate relative_path_str once for both summarizing and processing
+                # This was previously inside process_file or constructed for summarize_file
+                try:
+                    relative_path_str = str(file_path.relative_to(output_rel_root)).replace(os.sep, '/')
+                except ValueError:
+                    relative_path_str = str(file_path) # Fallback if not relative
 
-                if file_output is not None:
-                    output_parts.append(file_output)
+                if summarize:
+                    if cache_data is None: # Should not happen if called correctly from core_logic
+                        logger.error("Cache data is None during summarization walk. This is unexpected.")
+                        cache_data = {} # Avoid crashing, use empty cache
+
+                    logger.debug(f"Summarizing file in walk: {file_path}")
+                    summary_content = summarize_file(
+                        file_path=file_path,
+                        project_root=output_rel_root, # output_rel_root is project_root in this context
+                        cache_data=cache_data
+                    )
+                    summary_cache_modified_in_walk = True # Assume cache might have been modified
+
+                    if summary_content.startswith("[Error:"):
+                        logger.warning(f"Skipping summary for {file_path} in walk due to error: {summary_content}")
+                    else:
+                        header = f"```path={relative_path_str}"
+                        file_output_content = header + "\n" + summary_content.strip() + "\n```\n"
+                        current_file_size_added = len(summary_content.encode('utf-8'))
+                else:
+                    # Original process_file call
+                    processed_output, processed_size = process_file(
+                        file_path=file_path,
+                        output_rel_root=output_rel_root, # process_file calculates its own relative_path
+                        size_limit_bytes=size_limit_bytes,
+                        total_size_bytes=total_size_bytes,
+                        list_only=list_only,
+                        include_size_in_list=include_size_in_list,
+                        debug_explain=debug_explain
+                    )
+                    file_output_content = processed_output
+                    current_file_size_added = processed_size
+
+                if file_output_content is not None:
+                    # Check size limit (applies to both full content and summaries)
+                    # list_only implies current_file_size_added is 0 if handled by process_file
+                    if not list_only and (total_size_bytes + current_file_size_added > size_limit_bytes):
+                        if current_file_size_added > size_limit_bytes and total_size_bytes == 0:
+                             logger.warning(f"File/Summary {file_path} ({current_file_size_added} bytes) content exceeds size limit of {size_limit_bytes / (1024*1024):.2f}MB. Skipping.")
+                             continue # Skip this file/summary
+                        else:
+                             # Adding this file/summary pushes over the limit
+                             raise ContextSizeExceededError(int(size_limit_bytes / (1024*1024)), total_size_bytes + current_file_size_added, file_path)
+
+                    output_parts.append(file_output_content)
                     processed_files_set.add(file_path)
-                    total_size_bytes += file_size_added
+                    total_size_bytes += current_file_size_added
 
             except ContextSizeExceededError:
-                 # Re-raise to be caught by the main function
-                 raise
+                raise # Re-raise to be caught by the main function
             except Exception as e_proc:
-                 logger.error(f"Error processing file {file_path} via file_processor: {e_proc}")
+                logger.error(f"Error processing/summarizing file {file_path} in walk: {e_proc}", exc_info=True)
 
         # --- End File Loop ---
     # --- End os.walk Loop ---
 
-    return output_parts, total_size_bytes, processed_files_set
+    return output_parts, total_size_bytes, processed_files_set, summary_cache_modified_in_walk

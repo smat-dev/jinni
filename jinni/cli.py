@@ -9,11 +9,11 @@ from typing import List, Optional, Set # Added Set
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import logging
-import logging.handlers
+import logging.handlers # Already present, but good to confirm
 # Import from refactored modules
 from jinni.core_logic import read_context, DEFAULT_SIZE_LIMIT_MB, ENV_VAR_SIZE_LIMIT # Re-add ENV_VAR_SIZE_LIMIT
 from jinni.exceptions import ContextSizeExceededError, DetailedContextSizeError # Exceptions moved
-from jinni.utils import ESSENTIAL_USAGE_DOC # Import the shared usage doc constant
+from jinni.utils import ESSENTIAL_USAGE_DOC, setup_file_logging # Import the shared usage doc constant and new logging setup function
 from jinni.utils import _translate_wsl_path # Import the WSL path translator
 from jinni.utils import ensure_no_nul
 # ENV_VAR_SIZE_LIMIT is likely handled internally now
@@ -212,24 +212,28 @@ def handle_read_command(args):
     stderr_handler.setLevel(logging.DEBUG if debug_explain else logging.WARNING) # Only show WARNING+ on stderr by default
     stderr_handler.setFormatter(stderr_formatter)
 
-    root_logger = logging.getLogger()
+    root_logger = logging.getLogger() # Get the root logger
     if root_logger.hasHandlers():
-        root_logger.handlers.clear()
+        root_logger.handlers.clear() # Clear existing handlers
 
-    root_logger.addHandler(stderr_handler)
-    root_logger.setLevel(logging.DEBUG if debug_explain else logging.INFO) # Set root level based on debug
+    root_logger.addHandler(stderr_handler) # Add stderr handler first
+    root_logger.setLevel(logging.DEBUG if debug_explain else logging.INFO) # Set root level
+
+    # Setup file logging using the new utility function
+    # The default filename "jinni.log" will be used as per setup_file_logging default
+    setup_file_logging(root_logger, args.log_file)
 
     if debug_explain:
         logger.debug("Debug mode enabled.")
-        try:
-            file_handler = logging.FileHandler(DEBUG_LOG_FILENAME, mode='w')
-            file_handler.setLevel(logging.DEBUG)
-            file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            file_handler.setFormatter(file_formatter)
-            root_logger.addHandler(file_handler)
-            logger.debug(f"Also writing DEBUG logs to {DEBUG_LOG_FILENAME}")
-        except Exception as e:
-            logger.error(f"Failed to configure debug log file handler: {e}")
+        # The old file_handler for DEBUG_LOG_FILENAME is removed as setup_file_logging
+        # now handles the main file logging. If a separate debug log file is still desired,
+        # it would need to be configured in addition to setup_file_logging.
+        # For this task, we assume args.log_file with setup_file_logging is the primary file logging.
+        if args.log_file:
+            logger.debug(f"File logging is also enabled via --log-file to jinni.log (or custom name if setup_file_logging is changed).")
+        else:
+            logger.debug("File logging is not enabled via --log-file.")
+
 
     # --- Load Override Rules if specified ---
     override_rules_list: Optional[List[str]] = None
@@ -275,7 +279,8 @@ def handle_read_command(args):
             list_only=list_only,
             size_limit_mb=size_limit_mb,
             debug_explain=debug_explain,
-            include_size_in_list=args.size # Pass the CLI arg value
+            include_size_in_list=args.size, # Pass the CLI arg value
+            summarize=args.summarize # Pass the new summarize flag
         )
 
         # --- Output ---
@@ -414,6 +419,16 @@ Examples:
         "--usage",
         action="store_true",
         help="Display the Jinni usage documentation (README.md) and exit."
+    )
+    parser.add_argument(
+        "--summarize",
+        action="store_true",
+        help="Enable AI-powered summarization of file contents. Requires GEMINI_API_KEY environment variable."
+    )
+    parser.add_argument(
+        "--log-file",
+        action="store_true",
+        help="Enable logging to jinni.log in the current directory. Rotates logs on run."
     )
 
     # --- Parse Arguments ---

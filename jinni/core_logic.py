@@ -30,8 +30,11 @@ from .utils import (
     get_large_files,
     # get_usage_doc removed as it's no longer used
     _find_context_files_for_dir, # Needed by context_walker, but keep import here for now? No, walker imports it.
+    load_cache,
+    save_cache,
+    DEFAULT_CACHE_DIR,
 )
-from .file_processor import process_file
+from .file_processor import process_file, summarize_file
 from .context_walker import walk_and_process
 
 # Setup logger for this module
@@ -52,7 +55,8 @@ def read_context(
     list_only: bool = False,
     size_limit_mb: Optional[int] = None,
     debug_explain: bool = False,
-    include_size_in_list: bool = False
+    include_size_in_list: bool = False,
+    summarize: bool = False
 ) -> str:
     """
     Orchestrates the context reading process, handling flexible inputs.
@@ -81,6 +85,11 @@ def read_context(
         ImportError: If pathspec is required but not installed.
     """
     # --- Initial Setup & Validation ---
+
+    # Cache Handling
+    cache_dir = DEFAULT_CACHE_DIR # Or determine appropriately if it can be configured
+    summary_cache_data = load_cache(cache_dir)
+    summary_cache_modified = False
 
     # Validate project_root_str FIRST if provided, and set roots
     output_rel_root: Path
@@ -194,54 +203,91 @@ def read_context(
 
             if current_target_path.is_file():
                 if debug_explain: logger.debug(f"Processing file target: {current_target_path}")
-                file_output, file_size_added = process_file(
-                    file_path=current_target_path,
-                    output_rel_root=output_rel_root,
-                    size_limit_bytes=size_limit_bytes,
-                    total_size_bytes=total_size_bytes,
-                    list_only=list_only,
-                    include_size_in_list=include_size_in_list,
-                    debug_explain=debug_explain
-                )
-                if file_output is not None:
-                    # Check if adding this file *content* exceeds limit (only if not list_only)
-                    if not list_only and (total_size_bytes + file_size_added > size_limit_bytes):
-                         # Check if file alone exceeds limit
-                         if file_size_added > size_limit_bytes and total_size_bytes == 0:
-                              logger.warning(f"File {current_target_path} ({file_size_added} bytes) content exceeds size limit of {effective_limit_mb}MB. Skipping.")
-                              continue # Skip this file
-                         else:
-                              # Adding this file pushes over the limit
-                              raise ContextSizeExceededError(effective_limit_mb, total_size_bytes + file_size_added, current_target_path)
+                file_output: Optional[str] = None
+                file_size_added: int = 0
 
+                if summarize:
+                    logger.debug(f"Summarizing file target: {current_target_path}")
+                    summary_content = summarize_file(
+                        file_path=current_target_path,
+                        project_root=output_rel_root, # output_rel_root is project_root here
+                        cache_data=summary_cache_data
+                    )
+                    summary_cache_modified = True # Assume cache might be modified
+
+                    if summary_content.startswith("[Error:"):
+                        logger.warning(f"Skipping summary for {current_target_path} due to error: {summary_content}")
+                        # Optionally, include error in output, or just skip
+                        # For now, skipping if error.
+                    else:
+                        try:
+                            relative_path_str = str(current_target_path.relative_to(output_rel_root)).replace(os.sep, '/')
+                        except ValueError:
+                            relative_path_str = str(current_target_path) # Fallback
+                        header = f"```path={relative_path_str}"
+                        file_output = header + "\n" + summary_content.strip() + "\n```\n"
+                        file_size_added = len(summary_content.encode('utf-8'))
+                else:
+                    # Original process_file call
+                    processed_output, processed_size = process_file(
+                        file_path=current_target_path,
+                        output_rel_root=output_rel_root,
+                        size_limit_bytes=size_limit_bytes,
+                        total_size_bytes=total_size_bytes,
+                        list_only=list_only,
+                        include_size_in_list=include_size_in_list,
+                        debug_explain=debug_explain
+                    )
+                    file_output = processed_output
+                    file_size_added = processed_size
+
+                if file_output is not None:
+                    # Check if adding this file *content* or *summary* exceeds limit
+                    # Note: if list_only is true, file_size_added will be 0 from process_file
+                    # and for summarize, list_only effectively means no content, so this check is fine.
+                    if not list_only and (total_size_bytes + file_size_added > size_limit_bytes):
+                        if file_size_added > size_limit_bytes and total_size_bytes == 0:
+                            logger.warning(f"File/Summary {current_target_path} ({file_size_added} bytes) content exceeds size limit of {effective_limit_mb}MB. Skipping.")
+                            continue
+                        else:
+                            raise ContextSizeExceededError(effective_limit_mb, total_size_bytes + file_size_added, current_target_path)
+                    
                     output_parts.append(file_output)
                     processed_files_set.add(current_target_path)
-                    total_size_bytes += file_size_added # Add size only if content included
+                    total_size_bytes += file_size_added
 
             elif current_target_path.is_dir():
                 if debug_explain: logger.debug(f"Processing directory target: {current_target_path}")
-                dir_output_parts, dir_total_size, dir_processed_files = walk_and_process(
-                    walk_target_path=current_target_path, # This is now the root for rule discovery/matching
-                    # rule_discovery_root is removed
-                    output_rel_root=output_rel_root, # Still needed for final output paths
-                    initial_target_paths_set=initial_target_paths_set, # Pass initial targets
+                dir_output_parts, dir_total_size, dir_processed_files, summary_cache_modified_from_walk = walk_and_process(
+                    walk_target_path=current_target_path,
+                    output_rel_root=output_rel_root,
+                    initial_target_paths_set=initial_target_paths_set,
                     use_overrides=use_overrides,
                     override_spec=override_spec,
-                    size_limit_bytes=size_limit_bytes - total_size_bytes, # Pass remaining budget
+                    size_limit_bytes=size_limit_bytes - total_size_bytes,
                     list_only=list_only,
                     include_size_in_list=include_size_in_list,
-                    debug_explain=debug_explain
-                    # rule_application_root is removed
+                    debug_explain=debug_explain,
+                    summarize=summarize, # Pass summarize flag
+                    cache_data=summary_cache_data # Pass cache data
                 )
+                if summary_cache_modified_from_walk:
+                    summary_cache_modified = True
+
                 output_parts.extend(dir_output_parts)
                 processed_files_set.update(dir_processed_files)
-                total_size_bytes += dir_total_size # Accumulate size from walker
+                total_size_bytes += dir_total_size
             else:
                  logger.warning(f"Target path is neither a file nor a directory: {current_target_path}")
 
         # --- Final Output Formatting ---
         final_output = "\n".join(output_parts) if list_only else SEPARATOR.join(output_parts)
         logger.info(f"Processed {len(processed_files_set)} files, total size: {total_size_bytes} bytes.")
+        
+        if summary_cache_modified:
+            logger.info("Saving updated summary cache.")
+            save_cache(cache_dir, summary_cache_data)
+            
         return final_output
 
     except ContextSizeExceededError as e:

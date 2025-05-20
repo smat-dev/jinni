@@ -5,9 +5,13 @@ import os
 import sys
 import datetime
 import logging
+import logging.handlers # Added for RotatingFileHandler
 import mimetypes
 import string
 import platform, subprocess, shutil
+import json # Added for JSON operations for caching
+import hashlib # Added for file hashing for caching
+import tiktoken # Added for token counting in call_gemini_api
 from urllib.parse import urlparse, unquote, quote
 from pathlib import Path, PureWindowsPath
 from typing import List, Tuple, Dict, Optional, Any
@@ -220,9 +224,55 @@ def _get_default_wsl_distro() -> str:
         pass
     return distro or "Ubuntu"
 
+# --- Logging Setup Utility ---
+def setup_file_logging(logger_instance: logging.Logger, log_to_file_flag: bool, log_filename: str = "jinni.log") -> None:
+    """
+    Configures file logging for a given logger instance.
+
+    Args:
+        logger_instance: The logger object to configure.
+        log_to_file_flag: Boolean indicating if file logging should be enabled.
+        log_filename: The name of the log file.
+    """
+    if log_to_file_flag:
+        log_file_path = Path(log_filename).resolve()
+        try:
+            # Ensure parent directory exists
+            log_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Create a RotatingFileHandler
+            file_handler = logging.handlers.RotatingFileHandler(
+                log_file_path,
+                maxBytes=5 * 1024 * 1024,  # 5MB
+                backupCount=3,
+                encoding='utf-8' # Good practice to specify encoding
+            )
+            # Create a Formatter
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            file_handler.setFormatter(formatter)
+            file_handler.setLevel(logging.INFO) # Or logging.DEBUG if more verbosity needed in file
+
+            # Add the handler to the logger instance
+            logger_instance.addHandler(file_handler)
+            # Log a message indicating file logging is active
+            # Use the logger_instance itself to log this, so it goes to the new file handler too
+            logger_instance.info(f"File logging active. Logging to: {log_file_path}")
+
+        except Exception as e:
+            # If file logging setup fails, log error to stderr (or existing handlers)
+            # and continue without file logging.
+            logger_instance.error(f"Failed to setup file logging to {log_file_path}: {e}", exc_info=True)
+
+
 # --- Constants moved temporarily or redefined ---
 # These might belong in a dedicated constants module later
 BINARY_CHECK_CHUNK_SIZE = 1024
+
+# --- Constants for Summarization Cache ---
+SUMMARY_CACHE_FILENAME = ".jinni_summary_cache.json"
+# For now, cache is in the current working directory from where jinni is run.
+# Consider options like user config dir (e.g., appdirs) in the future.
+DEFAULT_CACHE_DIR = Path(".") # Represents the current working directory
 
 APPLICATION_TEXT_MIMES = {
     'application/json', 'application/xml', 'application/xhtml+xml', 'application/rtf',
@@ -301,6 +351,165 @@ When requesting context using the `read_context` tool:
 """
 
 # --- Helper Functions (Moved from core_logic.py) ---
+
+def _calculate_file_hash(file_path: Path) -> str:
+    """
+    Calculates the SHA256 hash of a file.
+
+    Args:
+        file_path: The path to the file.
+
+    Returns:
+        The hexadecimal SHA256 hash string of the file.
+        Returns an empty string if the file cannot be read.
+    """
+    logger.debug(f"Calculating SHA256 hash for: {file_path}")
+    hasher = hashlib.sha256()
+    try:
+        with open(file_path, 'rb') as f:
+            while chunk := f.read(8192): # Read in 8KB chunks
+                hasher.update(chunk)
+        hex_hash = hasher.hexdigest()
+        logger.debug(f"Calculated hash for {file_path}: {hex_hash}")
+        return hex_hash
+    except OSError as e:
+        logger.error(f"Could not read file {file_path} for hashing: {e}")
+        return "" # Return empty string or raise? Empty for now.
+    except Exception as e:
+        logger.error(f"Unexpected error during hashing for {file_path}: {e}", exc_info=True)
+        return ""
+
+# --- Cache Utility Functions ---
+
+def load_cache(cache_dir: Path) -> dict:
+    """
+    Loads the summary cache from a JSON file.
+
+    Args:
+        cache_dir: The directory where the cache file is located.
+
+    Returns:
+        A dictionary containing the cached summaries.
+        Returns an empty dictionary if the cache file doesn't exist or is invalid.
+    """
+    cache_file_path = cache_dir / SUMMARY_CACHE_FILENAME
+    logger.info(f"Attempting to load summary cache from: {cache_file_path}")
+    if cache_file_path.exists() and cache_file_path.is_file():
+        try:
+            with open(cache_file_path, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+            logger.info(f"Successfully loaded summary cache from: {cache_file_path}")
+            return cache_data
+        except json.JSONDecodeError as e:
+            logger.error(f"Error decoding JSON from cache file {cache_file_path}: {e}")
+            return {}
+        except OSError as e:
+            logger.error(f"Error reading cache file {cache_file_path}: {e}")
+            return {}
+        except Exception as e:
+            logger.error(f"Unexpected error loading cache file {cache_file_path}: {e}", exc_info=True)
+            return {}
+    else:
+        logger.info(f"Cache file not found at: {cache_file_path}. Returning empty cache.")
+        return {}
+
+def save_cache(cache_dir: Path, cache_data: dict) -> None:
+    """
+    Saves the summary cache data to a JSON file.
+
+    Args:
+        cache_dir: The directory where the cache file will be saved.
+        cache_data: The dictionary containing the cache data to save.
+    """
+    cache_file_path = cache_dir / SUMMARY_CACHE_FILENAME
+    logger.info(f"Attempting to save summary cache to: {cache_file_path}")
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True) # Ensure directory exists
+        with open(cache_file_path, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f, indent=4)
+        logger.info(f"Successfully saved summary cache to: {cache_file_path}")
+    except OSError as e:
+        logger.error(f"Error writing cache file {cache_file_path}: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error saving cache file {cache_file_path}: {e}", exc_info=True)
+
+def get_summary_from_cache(cache_data: dict, file_path: Path, project_root: Path) -> Optional[str]:
+    """
+    Retrieves a summary from the cache if available and the file hash matches.
+
+    Args:
+        cache_data: The loaded cache data.
+        file_path: The absolute path to the file.
+        project_root: The absolute path to the project root directory.
+
+    Returns:
+        The cached summary string if found and valid, otherwise None.
+    """
+    if not file_path.is_absolute():
+        logger.warning(f"File path for cache lookup is not absolute: {file_path}. This might lead to incorrect cache keys.")
+    if not project_root.is_absolute():
+        logger.warning(f"Project root for cache lookup is not absolute: {project_root}. This might lead to incorrect cache keys.")
+
+    try:
+        relative_path_str = str(file_path.relative_to(project_root)).replace(os.sep, '/')
+    except ValueError as e:
+        logger.error(f"Could not determine relative path for {file_path} in project {project_root}: {e}")
+        return None
+
+    logger.debug(f"Attempting to get summary for '{relative_path_str}' from cache.")
+    cached_item = cache_data.get(relative_path_str)
+
+    if cached_item:
+        stored_hash = cached_item.get("hash")
+        current_hash = _calculate_file_hash(file_path)
+
+        if not current_hash: # File unreadable or other hash error
+            logger.warning(f"Could not calculate current hash for {file_path}. Invalidating cache entry.")
+            return None
+
+        if stored_hash == current_hash:
+            logger.info(f"Cache hit for: {relative_path_str} (Hash: {current_hash})")
+            return cached_item.get("summary")
+        else:
+            logger.info(f"Cache miss for: {relative_path_str}. Hash mismatch (Stored: {stored_hash}, Current: {current_hash})")
+            return None
+    else:
+        logger.info(f"Cache miss for: {relative_path_str}. Item not found in cache.")
+        return None
+
+def update_cache(cache_data: dict, file_path: Path, project_root: Path, summary: str) -> None:
+    """
+    Updates the cache with a new summary and file hash.
+
+    Args:
+        cache_data: The cache data dictionary to update.
+        file_path: The absolute path to the file.
+        project_root: The absolute path to the project root directory.
+        summary: The summary string to cache for the file.
+    """
+    if not file_path.is_absolute():
+        logger.warning(f"File path for cache update is not absolute: {file_path}. This might lead to incorrect cache keys.")
+    if not project_root.is_absolute():
+        logger.warning(f"Project root for cache update is not absolute: {project_root}. This might lead to incorrect cache keys.")
+
+    try:
+        relative_path_str = str(file_path.relative_to(project_root)).replace(os.sep, '/')
+    except ValueError as e:
+        logger.error(f"Could not determine relative path for {file_path} in project {project_root} for cache update: {e}")
+        return
+
+    current_hash = _calculate_file_hash(file_path)
+    if not current_hash: # File unreadable or other hash error
+        logger.warning(f"Could not calculate hash for {file_path}. Cannot update cache.")
+        return
+
+    logger.info(f"Updating cache for: {relative_path_str} (Hash: {current_hash})")
+    cache_data[relative_path_str] = {
+        "hash": current_hash,
+        "summary": summary,
+        "last_updated_utc": datetime.datetime.utcnow().isoformat() + "Z" # Added timestamp
+    }
+    # Note: The save_cache function needs to be called separately after updates.
 
 def get_file_info(file_path: Path) -> Dict[str, Any]:
     """Get file information including size and last modified time."""
@@ -770,3 +979,72 @@ def _strip_wsl_uri_to_posix(uri: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"[_strip_wsl_uri_to_posix] Error processing URI '{uri}': {e}", exc_info=True)
         return None # Return None on unexpected error
+
+# --- Gemini API Utility ---
+def call_gemini_api(prompt_text: str, api_key: Optional[str] = None) -> str:
+    """
+    Calls the Gemini API to generate content based on the provided prompt.
+
+    Args:
+        prompt_text: The text prompt to send to the Gemini API.
+        api_key: The API key for the Gemini API. If not provided,
+                 it will be retrieved from the GEMINI_API_KEY environment variable.
+
+    Returns:
+        The text response from the Gemini API.
+
+    Raises:
+        ValueError: If the API key is not found.
+        # TODO: Potentially raise a custom exception for API errors.
+    """
+    logger.info("Initiating Gemini API call.")
+
+    if not api_key:
+        api_key = os.environ.get("GEMINI_API_KEY")
+
+    if not api_key:
+        logger.error("Gemini API key not found in arguments or environment variables.")
+        raise ValueError("Gemini API key not provided and not found in GEMINI_API_KEY environment variable.")
+
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        logger.error("google-generativeai library not found. Please install it: pip install google-generativeai")
+        return "Error: google-generativeai library not installed."
+
+    # Log prompt length
+    prompt_char_len = len(prompt_text)
+    prompt_byte_len = len(prompt_text.encode('utf-8'))
+    num_prompt_tokens = 0
+    try:
+        enc = tiktoken.get_encoding("cl100k_base") # Standard encoder
+        num_prompt_tokens = len(enc.encode(prompt_text))
+    except Exception as e_tiktoken:
+        logger.debug(f"Could not count prompt tokens with tiktoken: {e_tiktoken}. Token count will be 0.")
+    
+    logger.info(f"Gemini API call initiated. Prompt length: {prompt_char_len} chars / {prompt_byte_len} bytes / {num_prompt_tokens} tokens.")
+    logger.debug(f"Generating content with Gemini for prompt (first 100 chars): '{prompt_text[:100]}...'")
+
+
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash') # Using gemini-1.5-flash as per current availability
+        response = model.generate_content(prompt_text)
+        
+        summary_char_len = len(response.text)
+        # Assuming summary is text, so byte length similar to char length for ASCII, varies for UTF-8
+        logger.info(f"Gemini API call successful. Summary length: {summary_char_len} chars.")
+        return response.text
+    except Exception as e: # Catching a broad exception for now, can be refined
+        # Check for specific Google API errors if the library provides them, e.g., google.api_core.exceptions
+        # For now, using a general exception catch.
+        # Example of how you might check for a specific error type if you knew it:
+        # if isinstance(e, google.api_core.exceptions.PermissionDenied):
+        #     logger.error(f"Gemini API permission denied: {e}")
+        #     return f"Error: Gemini API Permission Denied - {e}"
+        # elif isinstance(e, google.api_core.exceptions.GoogleAPIError):
+        #    logger.error(f"Gemini API call failed due to a Google API error: {e}")
+        #    return f"Error: Gemini API call failed - {e}"
+
+        logger.error(f"Gemini API call failed: {e}", exc_info=True) # Log with stack trace
+        return f"Error: Gemini API call failed - {e}"

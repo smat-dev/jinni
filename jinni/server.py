@@ -12,6 +12,7 @@ from pydantic import Field
 # Ensure jinni package is importable if running script directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import logging.handlers # Added for RotatingFileHandler (though setup_file_logging handles it)
 # Setup logger for the server
 logger = logging.getLogger("jinni.server")
 # Configure basic logging if no handlers are configured (e.g., when run directly)
@@ -25,7 +26,7 @@ from mcp.server.fastmcp import FastMCP, Context
 # Import from refactored modules
 from jinni.core_logic import read_context as core_read_context # Main functions from new core_logic
 from jinni.exceptions import ContextSizeExceededError, DetailedContextSizeError # Exceptions moved
-from jinni.utils import ESSENTIAL_USAGE_DOC, _translate_wsl_path, ensure_no_nul # Import the shared usage doc constant and WSL path translator
+from jinni.utils import ESSENTIAL_USAGE_DOC, _translate_wsl_path, ensure_no_nul, setup_file_logging # Import the shared usage doc constant and WSL path translator
 # Constants like DEFAULT_SIZE_LIMIT_MB might be needed if used directly, otherwise remove.
 # Let's assume they are handled within core_logic now.
 
@@ -257,6 +258,144 @@ async def read_context(
                 core_logger.removeHandler(temp_handler)
             temp_handler.close()
 
+# --- summarize_context Tool ---
+@server.tool(description=(
+    "Reads and summarizes context from specified files/directories using AI. "
+    "Requires GEMINI_API_KEY environment variable to be set for the server. "
+    "Functionality is similar to 'read_context' but with AI summarization enabled. "
+    "Provide `rules=[]` if no specific filtering rules are needed (uses defaults). "
+    "Consult the `usage` tool for details on rule syntax."
+))
+async def summarize_context(
+    project_root: str = Field(description="**MUST BE ABSOLUTE PATH**. The absolute path to the project root directory."),
+    targets: List[str] = Field(description="List of paths (absolute or relative to CWD) to specific files or directories within the project root to process. If empty (`[]`), the entire `project_root` is processed."),
+    rules: List[str] = Field(description="List of inline filtering rules. Provide `[]` if no specific rules are needed. Consult `usage` tool for syntax."),
+    list_only: bool = False, # This will list summarized file paths, actual content summarization happens regardless.
+    size_limit_mb: Optional[int] = None,
+    debug_explain: bool = False,
+) -> str:
+    logger.info("--- summarize_context tool invoked ---")
+    # Translate incoming paths
+    translated_project_root = _translate_wsl_path(project_root)
+    translated_targets = [_translate_wsl_path(t) for t in targets]
+    logger.debug(f"Original paths: project_root='{project_root}', targets='{targets}'")
+    logger.debug(f"Translated paths: project_root='{translated_project_root}', targets='{translated_targets}'")
+
+    # Defensive NUL check
+    ensure_no_nul(translated_project_root, "project_root")
+    for t in translated_targets:
+        ensure_no_nul(t, "target path")
+
+    logger.debug(f"Processing summarize_context request: project_root(orig)='{project_root}', targets(orig)='{targets}', list_only={list_only}, rules={rules}, debug_explain={debug_explain}")
+
+    # --- Input Validation (copied from read_context tool) ---
+    if not os.path.isabs(translated_project_root):
+         raise ValueError(f"Tool 'project_root' argument must be absolute (after translation), received: '{translated_project_root}' from original '{project_root}'")
+    resolved_project_root_path = Path(translated_project_root).resolve()
+    if not resolved_project_root_path.is_dir():
+         raise ValueError(f"Tool 'project_root' path does not exist or is not a directory: {resolved_project_root_path} (translated from '{project_root}')")
+    resolved_project_root_path_str = str(resolved_project_root_path)
+    logger.debug(f"Using project_root (translated): {resolved_project_root_path_str}")
+
+    resolved_target_paths_str: List[str] = []
+    effective_targets_set: Set[str] = set()
+
+    if translated_targets:
+        for idx, single_target in enumerate(translated_targets):
+            if not isinstance(single_target, str):
+                 raise TypeError(f"Tool 'targets' item at index {idx} must be a string, got {type(single_target)}")
+            target_path_obj = Path(single_target)
+            if target_path_obj.is_absolute():
+                resolved_target_path = target_path_obj.resolve()
+            else:
+                resolved_target_path = (resolved_project_root_path / target_path_obj).resolve()
+            if not resolved_target_path.exists():
+                 raise FileNotFoundError(f"Tool 'targets' path '{single_target}' (resolved to {resolved_target_path}) does not exist.")
+            try:
+                resolved_target_path.relative_to(resolved_project_root_path)
+            except ValueError:
+                 raise ValueError(f"Tool 'targets' path '{resolved_target_path}' is outside the specified project root '{resolved_project_root_path}'")
+            resolved_path_str = str(resolved_target_path)
+            if resolved_path_str not in effective_targets_set:
+                 resolved_target_paths_str.append(resolved_path_str)
+                 effective_targets_set.add(resolved_path_str)
+    
+    if not resolved_target_paths_str:
+        resolved_target_paths_str = [resolved_project_root_path_str]
+
+    if rules is None:
+        raise ValueError("Tool 'rules' argument is mandatory. Provide an empty list [] if no specific rules are needed.")
+    if not isinstance(rules, list):
+        raise TypeError(f"Tool 'rules' argument must be a list, got {type(rules)}")
+    for idx, rule in enumerate(rules):
+        if not isinstance(rule, str):
+            raise TypeError(f"Tool 'rules' item at index {idx} must be a string, got {type(rule)}")
+    logger.debug(f"Using provided rules: {rules}")
+
+    if SERVER_ROOT_PATH:
+        try:
+            resolved_project_root_path.relative_to(SERVER_ROOT_PATH)
+        except ValueError:
+             raise ValueError(f"Tool project_root '{resolved_project_root_path}' is outside the allowed server root '{SERVER_ROOT_PATH}'")
+
+    logger.info(f"Processing project_root: {resolved_project_root_path_str}")
+    logger.info(f"Focusing on target(s): {resolved_target_paths_str}")
+    
+    # --- Call Core Logic with summarize=True ---
+    log_capture_buffer = None
+    temp_handler = None
+    loggers_to_capture = []
+    debug_output = ""
+
+    try:
+        if debug_explain:
+            log_capture_buffer = io.StringIO()
+            temp_handler = logging.StreamHandler(log_capture_buffer)
+            temp_handler.setLevel(logging.DEBUG)
+            formatter = logging.Formatter('%(name)s:%(levelname)s: %(message)s')
+            temp_handler.setFormatter(formatter)
+            loggers_to_capture = [
+                logging.getLogger(name) for name in
+                ["jinni.core_logic", "jinni.context_walker", "jinni.file_processor", "jinni.config_system", "jinni.utils"]
+            ]
+            for core_logger in loggers_to_capture:
+                original_level = core_logger.level
+                core_logger.setLevel(logging.DEBUG)
+                core_logger.addHandler(temp_handler)
+
+        effective_target_paths_str = resolved_target_paths_str
+        result_content = core_read_context(
+            target_paths_str=effective_target_paths_str,
+            project_root_str=resolved_project_root_path_str,
+            override_rules=rules, # In MCP context, 'rules' from tool args are 'override_rules' for core_logic
+            list_only=list_only,
+            size_limit_mb=size_limit_mb,
+            debug_explain=debug_explain,
+            summarize=True  # Key difference: enable summarization
+        )
+        logger.debug(f"Finished processing summarize_context for project_root: {resolved_project_root_path_str}, targets(s): {resolved_target_paths_str}. Result length: {len(result_content)}")
+
+        if debug_explain and log_capture_buffer:
+            debug_output = log_capture_buffer.getvalue()
+
+        if debug_output:
+            return f"{result_content}\n\n--- DEBUG LOG ---\n{debug_output}"
+        else:
+            return result_content
+
+    except (FileNotFoundError, ContextSizeExceededError, ValueError, DetailedContextSizeError) as e:
+        logger.error(f"Error during summarize_context call for project_root='{resolved_project_root_path_str}', targets(s)='{resolved_target_paths_str}': {type(e).__name__} - {e}")
+        raise e
+    except Exception as e:
+        logger.exception(f"Unexpected error processing summarize_context for project_root='{resolved_project_root_path_str}', targets(s)='{resolved_target_paths_str}': {type(e).__name__} - {e}")
+        raise e
+    finally:
+        if temp_handler and loggers_to_capture:
+            logger.debug("Removing temporary debug log handler for summarize_context.")
+            for core_logger in loggers_to_capture:
+                core_logger.removeHandler(temp_handler)
+            temp_handler.close()
+
 
 # --- Server Execution Function ---
 def run_server():
@@ -279,19 +418,33 @@ def run_server():
         default='INFO',
         help="Set the logging level for the server."
     )
+    parser.add_argument(
+        "--log-file",
+        action="store_true",
+        help="Enable logging to jinni-server.log in the current directory. Rotates logs on run."
+    )
 
     args = parser.parse_args()
 
     # --- Configure Logging Level ---
-    log_level = getattr(logging, args.log_level.upper(), logging.INFO)
-    # Reconfigure root logger level if needed (affects handlers added later too)
-    logging.getLogger().setLevel(log_level)
-    # Also set the level for our specific logger
-    logger.setLevel(log_level)
-    # Update handler level if already configured (e.g., basicConfig ran)
-    for handler in logging.getLogger().handlers:
-        handler.setLevel(log_level)
-    logger.info(f"Server log level set to: {args.log_level.upper()}")
+    log_level_val = getattr(logging, args.log_level.upper(), logging.INFO)
+    # Configure the root logger first (this will affect the default stream handler from basicConfig)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level_val)
+    for handler in root_logger.handlers: # Update level of existing handlers
+        handler.setLevel(log_level_val)
+    
+    # Set level for the server's specific logger
+    logger.setLevel(log_level_val)
+    logger.info(f"Server stderr log level set to: {args.log_level.upper()}")
+
+    # Setup file logging for the server's specific logger
+    # Using logger (logging.getLogger("jinni.server")) for file logging
+    setup_file_logging(logger, args.log_file, log_filename="jinni-server.log")
+    if args.log_file:
+        logger.info(f"Server file logging (for jinni.server) also configured to jinni-server.log with level {args.log_level.upper()}.")
+    else:
+        logger.info("Server file logging is not enabled.")
 
 
     if args.root:

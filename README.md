@@ -63,10 +63,12 @@ Cursor can silently drop context that is larger than the allowed maximum, so if 
 1.  **`jinni` MCP Server:**
     *   Integrates with MCP clients like Cursor, Cline, Roo, Claude Desktop, etc.
     *   Exposes a `read_context` tool that returns a concatenated string of relevant file contents from a specified project directory.
+    *   Exposes a `summarize_context` tool (New!) that returns AI-generated summaries of file contents.
 
 2.  **`jinni` CLI:**
     *   A command-line tool for manually generating the project context dump.
     *   Useful for feeding context to LLMs via copy-paste or file input. Or pipe the output wherever you need it.
+    *   Supports AI-powered summarization of content via the `--summarize` flag (New!).
 
 ## Features
 
@@ -85,6 +87,12 @@ Cursor can silently drop context that is larger than the allowed maximum, so if 
 *   **Metadata Headers:** Output includes a path header for each included file (e.g., ````path=src/app.py`). This can be disabled with `list_only`.
 *   **Encoding Handling:** Attempts multiple common text encodings (UTF-8, Latin-1, etc.).
 *   **List Only Mode:** Option to only list the relative paths of files that would be included, without their content.
+*   **AI-Powered Summarization (New!):**
+    *   Jinni can use AI (via Google's Gemini 1.5 Flash model) to summarize the content of files.
+    *   This provides a condensed version of your project's context, significantly reducing token count for LLMs and allowing for quicker understanding of file purposes.
+    *   Requires the `GEMINI_API_KEY` environment variable to be set (see "AI Summarization Details" below).
+    *   Summaries are cached in `.jinni_summary_cache.json` (in the current working directory) based on file content hashes to speed up subsequent runs and reduce API calls.
+    *   When summarization is active, the content within the ````path=...```` blocks will be the AI-generated summary.
 
 ## Usage
 
@@ -100,6 +108,19 @@ Cursor can silently drop context that is larger than the allowed maximum, so if 
     *   **`debug_explain` (boolean, optional):** Enable debug logging on the server.
     3.  **Output:** The tool returns a single string containing the concatenated content (with headers) or the file list. Paths in headers/lists are relative to the provided `project_root`. In case of a context size error, it returns a `DetailedContextSizeError` with details about the largest files.
 
+### MCP Server (`summarize_context` tool - New!)
+
+*   **Purpose:** Similar to `read_context`, but enables AI-powered summarization for the content of each file. The output for each file will be its AI-generated summary.
+*   **API Key:** Requires the `GEMINI_API_KEY` environment variable to be set on the server where Jinni is running.
+*   **Parameters:**
+    *   **`project_root` (string, required):** Absolute path to the project root.
+    *   **`targets` (JSON array of strings, required):** List of target files/directories.
+    *   **`rules` (JSON array of strings, required):** Inline filtering rules. `[]` uses defaults.
+    *   **`list_only` (boolean, optional):** If true, lists paths of files that would be summarized (summaries are still generated for caching if not present, to benefit future non-list_only calls).
+    *   **`size_limit_mb` (integer, optional):** Override context size limit.
+    *   **`debug_explain` (boolean, optional):** Enable detailed server-side debug logging.
+*   **Output:** Returns a single string where the content for each file is its AI-generated summary, prefixed by the ````path=...```` header.
+
 ### MCP Server (`usage` tool)
 
 *   **Invocation:** The model can invoke the `usage` tool (no arguments needed).
@@ -113,19 +134,26 @@ Cursor can silently drop context that is larger than the allowed maximum, so if 
     ```bash
     uvx jinni-server [OPTIONS]
     ```
+    *   **Server Options:**
+        *   `--root /absolute/path/`: Constrain server operations to a specific directory tree.
+        *   `--log-level <LEVEL>`: Set server log level (e.g., `DEBUG`, `INFO`).
+        *   `--log-file`: Enable logging to `jinni-server.log` in the server's CWD. (New!)
+
     Example MCP client configuration (e.g., `claude_desktop_config.json`):
     ```json
     {
       "mcpServers": {
         "jinni": {
           "command": "uvx",
-          "args": ["jinni-server"]
+          "args": ["jinni-server"] 
+          // To enable file logging for the server:
+          // "args": ["jinni-server", "--log-file"]
+          // To constrain server root and enable file logging:
+          // "args": ["jinni-server", "--root", "/path/to/my/projects", "--log-file"]
         }
       }
     }
     ```
-
-*You can optionally constrain the server to only read within a tree for security in case your LLM goes rogue: add `"--root", "/absolute/path/"` to the `args` list.*
 
 *See your specific MCP client's documentation for precise setup steps. Ensure `uv` is installed*
 
@@ -139,10 +167,12 @@ jinni [OPTIONS] [<PATH...>]
 *   **`-r <DIR>` / `--root <DIR>` (optional):** Specify the project root directory. If provided, rule discovery starts here, and output paths are relative to this directory. If omitted, the root is inferred from the common ancestor of the `<PATH...>` arguments (or CWD if only '.' is processed).
 *   **`--output <FILE>` / `-o <FILE>` (optional):** Write the output to `<FILE>` instead of printing to standard output.
 *   **`--list-only` / `-l` (optional):** Only list the relative paths of files that would be included.
+    *   **Note on `--list-token`:** If using the separate `--list-token` flag, token counts currently reflect the *original* file content, not the summarized content.
+*   **`--summarize` (optional, New!):** Enable AI-powered summarization of file contents. Requires the `GEMINI_API_KEY` environment variable to be set. Example: `jinni --summarize ./my_project`
 *   **`--overrides <FILE>` (optional):** Use rules from `<FILE>` instead of discovering `.contextfiles`.
 *   **`--size-limit-mb <MB>` / `-s <MB>` (optional):** Override the maximum context size in MB.
-*   **`--debug-explain` (optional):** Print detailed inclusion/exclusion reasons to stderr and `jinni_debug.log`.
-*   **`--root <DIR>` / `-r <DIR>` (optional):** See above.
+*   **`--debug-explain` (optional):** Print detailed inclusion/exclusion reasons to stderr. If `--log-file` is also used, debug logs go to `jinni.log`.
+*   **`--log-file` (optional, New!):** Enable logging to `jinni.log` in the current directory. Useful for observing the summarization process or debugging. Example: `jinni --summarize --log-file ./my_project`
 *   **`--no-copy` (optional):** Prevent automatically copying the output content to the system clipboard when printing to standard output (the default is to copy).
 
 ## Installation
@@ -223,6 +253,35 @@ Only `wsl+<distro>` URIs and absolute POSIX paths (starting with `/`) are transl
     ```bash
     jinni --no-copy ./my_project/
     ```
+*   **Generate AI summaries for context and log the process:**
+    ```bash
+    export GEMINI_API_KEY="YOUR_API_KEY_HERE" # Set API key first
+    jinni --summarize --log-file ./my_project/
+    ```
+
+## AI Summarization Details
+
+The AI summarization feature helps in reducing the overall token count provided to LLMs while still retaining the essence of each file's content.
+
+*   **API Key Requirement:**
+    *   You **must** set the `GEMINI_API_KEY` environment variable for this feature to work. This key is used to authenticate with Google's Gemini API.
+    *   Example:
+        ```bash
+        export GEMINI_API_KEY="YOUR_API_KEY_HERE"
+        ```
+*   **Caching Mechanism:**
+    *   Jinni caches generated summaries in a file named `.jinni_summary_cache.json`. This file is created in the directory where `jinni` (CLI) or `jinni-server` is executed (i.e., the current working directory).
+    *   Summaries are keyed by file paths (relative to the project root) and their content hashes (SHA256).
+    *   If a file's content changes, its hash will change, and Jinni will re-summarize it. Otherwise, the cached summary is used.
+    *   This mechanism significantly speeds up subsequent runs and minimizes API calls to the Gemini service, saving time and potential costs.
+*   **Output Format with Summarization:**
+    *   When the `--summarize` CLI option or the `summarize_context` MCP command is used, the content part of the output for each file will be the AI-generated summary, not the original file content. The path header remains the same:
+        ```
+        ```path=src/app.py
+        This is an AI-generated summary of app.py, focusing on its core purpose...
+        ```
+*   **Token Count Clarification (`--list-token`):**
+    *   The `--list-token` CLI option calculates token counts based on the *original* file content, not the summarized version. This is important to note if you are trying to estimate token savings from summarization.
 
 ## Configuration (`.contextfiles` & Overrides)
 

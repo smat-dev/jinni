@@ -15,6 +15,304 @@ logger = logging.getLogger("jinni.file_processor")
 if not logger.handlers and not logging.getLogger().handlers:
      logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+# Imports for summarization
+from .utils import (
+    call_gemini_api,
+    load_cache,
+    save_cache,
+    get_summary_from_cache,
+    update_cache,
+    SUMMARY_CACHE_FILENAME, # Might not be used directly here if cache_dir is passed
+    DEFAULT_CACHE_DIR,      # Might not be used directly here if cache_dir is passed
+    _calculate_file_hash    # For direct use if needed, though cache utils might abstract
+)
+# Path is already imported from pathlib
+import tiktoken # For token counting
+
+# --- Helper Function: Get Project Structure ---
+EXCLUDED_DIRS_FOR_STRUCTURE = {
+    ".git", "__pycache__", "node_modules", ".venv", "dist", "build",
+    ".vscode", ".idea", ".pytest_cache", "eggs", ".eggs", "htmlcov"
+}
+EXCLUDED_FILES_FOR_STRUCTURE = {
+    ".DS_Store", ".gitignore", ".gitattributes"
+}
+
+def _get_project_structure(project_root: Path, current_file_path: Optional[Path] = None) -> str:
+    """
+    Generates a textual representation of the project directory structure.
+
+    Args:
+        project_root: The root directory of the project.
+        current_file_path: Optional path to the file currently being summarized,
+                           to mark it in the structure.
+
+    Returns:
+        A string representing the directory structure.
+    """
+    logger.debug(f"Generating project structure for root: {project_root}")
+    structure_lines = []
+    # Ensure project_root is absolute for consistent processing
+    abs_project_root = project_root.resolve()
+    abs_current_file = current_file_path.resolve() if current_file_path else None
+
+    for root, dirs, files in os.walk(abs_project_root, topdown=True):
+        # Exclude directories
+        dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS_FOR_STRUCTURE]
+        
+        current_path = Path(root)
+        # Calculate depth for indentation relative to the original project_root argument
+        try:
+            # Make sure to use the original project_root for relative path calculation
+            # if the walked 'root' (current_path) started from a resolved abs_project_root.
+            relative_path = current_path.relative_to(abs_project_root)
+            depth = len(relative_path.parts)
+        except ValueError:
+            # This can happen if current_path is not under abs_project_root,
+            # though os.walk should ensure this if abs_project_root is used as the start.
+            # Or if project_root itself was a relative path initially.
+            # Default to 0 depth if relative_path calculation fails.
+            logger.warning(f"Could not determine relative path for {current_path} under {abs_project_root}. Using depth 0.")
+            depth = 0
+
+        indent = "  " * depth
+
+        # Add current directory to structure
+        if depth == 0: # Project root itself
+             structure_lines.append(f"{abs_project_root.name}/")
+        else:
+             structure_lines.append(f"{indent}{current_path.name}/")
+
+        # Add files in the current directory
+        for f_name in sorted(files):
+            if f_name in EXCLUDED_FILES_FOR_STRUCTURE:
+                continue
+            
+            file_path_abs = current_path / f_name
+            marker = " *" if abs_current_file and file_path_abs == abs_current_file else ""
+            structure_lines.append(f"{indent}  {f_name}{marker}")
+
+    logger.debug(f"Generated project structure with {len(structure_lines)} lines.")
+    # Limit structure size to avoid excessive token usage
+    # This is a simple line limit, could be token-based for more precision
+    MAX_STRUCTURE_LINES = 100 
+    if len(structure_lines) > MAX_STRUCTURE_LINES:
+        logger.warning(f"Project structure exceeds {MAX_STRUCTURE_LINES} lines. Truncating.")
+        structure_lines = structure_lines[:MAX_STRUCTURE_LINES]
+        structure_lines.append("[... structure truncated ...]")
+
+    return "\n".join(structure_lines)
+
+# --- Helper Function: Get README Summary ---
+README_FILENAMES = ["README.md", "readme.md", "README.txt", "readme.txt", "README", "readme"]
+README_CACHE_KEY = "_PROJECT_README_SUMMARY_"
+
+def _get_readme_summary(project_root: Path, cache_data: dict) -> str:
+    """
+    Finds and summarizes the project's README file, using a cache.
+
+    Args:
+        project_root: The root directory of the project.
+        cache_data: The loaded cache data dictionary.
+
+    Returns:
+        A summary of the README file, or "No README summary available."
+    """
+    logger.debug(f"Attempting to get README summary for project: {project_root}")
+
+    # Check cache first for the special README key
+    if README_CACHE_KEY in cache_data:
+        cached_readme_info = cache_data[README_CACHE_KEY]
+        # For README, we might just store the summary without a hash, or hash of README content.
+        # Assuming for now if key exists, summary is valid. Can add hash check if needed.
+        logger.info("README summary found in cache.")
+        return cached_readme_info.get("summary", "Error: Cached README summary malformed.")
+
+    readme_file_path: Optional[Path] = None
+    for name in README_FILENAMES:
+        path = project_root / name
+        if path.is_file():
+            readme_file_path = path
+            break
+    
+    if not readme_file_path:
+        logger.info(f"No README file found in {project_root} from options: {README_FILENAMES}")
+        return "No README summary available."
+
+    logger.info(f"Found README file: {readme_file_path}")
+    try:
+        readme_content_bytes = readme_file_path.read_bytes()
+        readme_content = readme_content_bytes.decode('utf-8', errors='replace') # Simple decode for README
+        
+        # Construct a simple prompt for README
+        readme_prompt = f"Concisely summarize the following README content in 2-4 sentences, focusing on the project's purpose and key features:\n\n{readme_content[:3000]}" # Limit README content to avoid large prompt
+        
+        logger.debug("Calling Gemini API for README summary.")
+        summary_text = call_gemini_api(prompt_text=readme_prompt) # API key handled by call_gemini_api
+
+        if summary_text.startswith("[Error:") or summary_text.startswith("Error:"):
+            logger.error(f"Failed to summarize README {readme_file_path}: {summary_text}")
+            return f"Could not summarize README: {summary_text}"
+
+        # Cache the README summary
+        readme_hash = _calculate_file_hash(readme_file_path) # Hash the readme for future validation
+        cache_data[README_CACHE_KEY] = {
+            "summary": summary_text,
+            "hash": readme_hash, # Store hash of the README content
+            "source_path": str(readme_file_path.relative_to(project_root)).replace(os.sep, '/'),
+            "last_updated_utc": datetime.datetime.utcnow().isoformat() + "Z"
+        }
+        logger.info(f"README summary generated and cached for {readme_file_path}.")
+        return summary_text
+
+    except OSError as e:
+        logger.error(f"Error reading README file {readme_file_path}: {e}")
+        return "Error reading README file."
+    except Exception as e:
+        logger.error(f"Unexpected error processing README {readme_file_path}: {e}", exc_info=True)
+        return "Unexpected error processing README."
+
+
+def summarize_file(file_path: Path, project_root: Path, cache_data: dict) -> str:
+    """
+    Summarizes a single file, using a cache if available.
+
+    Args:
+        file_path: Absolute path to the file to be summarized.
+        project_root: Absolute path to the project root.
+        cache_data: The loaded cache data dictionary.
+
+    Returns:
+        A string containing the summary of the file, or an error message.
+    """
+    logger.info(f"Summarization process started for: {file_path}")
+
+    # 1. Cache Check
+    # Calculate relative_file_path_str for logging before cache check
+    try:
+        relative_file_path_str = str(file_path.relative_to(project_root)).replace(os.sep, '/')
+    except ValueError:
+        # Fallback if file_path is not relative to project_root (e.g. if project_root is misconfigured or path is truly outside)
+        relative_file_path_str = str(file_path)
+        logger.warning(f"File path {file_path} is not under project root {project_root}. Using absolute path for logging.")
+
+    cached_summary = get_summary_from_cache(cache_data, file_path, project_root)
+    if cached_summary is not None:
+        logger.info(f"Cache hit for file: {relative_file_path_str}")
+        return cached_summary
+
+    logger.info(f"Cache miss for file: {relative_file_path_str}. Proceeding to read file content.")
+
+    # 2. Read File Content
+    file_content: Optional[str] = None
+    try:
+        file_bytes = file_path.read_bytes()
+        # Attempt to decode using common encodings
+        encodings_to_try = ['utf-8', 'latin-1', 'cp1252']
+        for enc in encodings_to_try:
+            try:
+                file_content = file_bytes.decode(enc)
+                logger.debug(f"Successfully decoded {file_path} using {enc}.")
+                break
+            except UnicodeDecodeError:
+                logger.debug(f"Failed to decode {file_path} with {enc}.")
+                continue
+        
+        if file_content is None:
+            logger.error(f"Could not decode file {file_path} using any of the attempted encodings: {encodings_to_try}.")
+            return "[Error: Could not decode file content with attempted encodings]"
+
+    except OSError as e:
+        logger.error(f"Error reading file {file_path} for summarization: {e}")
+        return "[Error: Could not read file content]"
+    except Exception as e:
+        logger.error(f"Unexpected error reading or decoding file {file_path} for summarization: {e}", exc_info=True)
+        return "[Error: Unexpected error during file reading/decoding]"
+
+    # 3. Get Project Structure and README Summary
+    project_structure_str = _get_project_structure(project_root, file_path)
+    readme_summary_str = _get_readme_summary(project_root, cache_data) # cache_data is passed to handle README caching
+
+    # 4. Token Counting & Target Size
+    try:
+        enc = tiktoken.get_encoding("cl100k_base")
+    except Exception as e: # Broad exception for tiktoken issues
+        logger.error(f"Could not initialize tiktoken encoder: {e}. Proceeding without token-based target length.")
+        enc = None # Allow fallback if tiktoken is missing/broken
+
+    num_tokens = 0
+    if enc and file_content: # Ensure file_content is not None
+        try:
+            num_tokens = len(enc.encode(file_content))
+        except Exception as e: # Catch potential errors during encoding
+            logger.error(f"Error encoding file content with tiktoken: {e}. Proceeding with default target length.")
+            num_tokens = 0 # Reset if encoding fails
+
+    # Ensure target_summary_tokens has a reasonable minimum and maximum
+    # Max is to prevent asking for summaries that are too long for the model or use case
+    target_summary_tokens = max(50, min(int(num_tokens * 0.15), 400)) # Target 15%, min 50, max 400 tokens
+
+    # 5. Construct Prompt
+    try:
+        relative_file_path_str = str(file_path.relative_to(project_root)).replace(os.sep, '/')
+    except ValueError:
+        logger.warning(f"Could not determine relative path for {file_path} in project {project_root}. Using absolute path in prompt.")
+        relative_file_path_str = str(file_path)
+        
+    # Limit file_content length in prompt to avoid overly large prompts
+    # This is a character limit, not token, but helps prevent extremely large API requests.
+    # A more sophisticated approach might truncate based on tokens.
+    MAX_FILE_CONTENT_CHARS_IN_PROMPT = 30000 # Approx 7.5k tokens, adjust as needed
+    truncated_file_content = file_content
+    if len(file_content) > MAX_FILE_CONTENT_CHARS_IN_PROMPT:
+        logger.warning(f"File content for {relative_file_path_str} is very long ({len(file_content)} chars). Truncating for prompt.")
+        # Truncate by taking a portion from the beginning and a portion from the end
+        # This helps preserve context from both start and end of large files.
+        # The exact split can be tuned.
+        chars_from_start = MAX_FILE_CONTENT_CHARS_IN_PROMPT // 2
+        chars_from_end = MAX_FILE_CONTENT_CHARS_IN_PROMPT - chars_from_start
+        truncated_file_content = (
+            file_content[:chars_from_start] +
+            "\n\n[... CONTENT TRUNCATED ...]\n\n" +
+            file_content[-chars_from_end:]
+        )
+
+
+    prompt_text = f"""Project Structure:
+{project_structure_str}
+
+Top-level README Summary:
+{readme_summary_str}
+
+File to Summarize: {relative_file_path_str}
+Target Summary Length: Approximately {target_summary_tokens} tokens.
+
+File Content:
+{truncated_file_content}
+
+Instruction:
+Summarize the above file content. Focus on its main purpose, inputs, outputs, key functionalities, and its relationship with other parts of the project if evident from the context provided.
+Do not include the file path or target length in the summary itself.
+The summary should be a concise explanation of the code's role and function.
+"""
+    logger.debug(f"Constructed prompt for {relative_file_path_str}. Prompt length (chars): {len(prompt_text)}")
+
+    # 6. Call Gemini API
+    logger.info(f"Calling Gemini API for summarization of: {relative_file_path_str}")
+    summary_text = call_gemini_api(prompt_text=prompt_text)
+
+    # 7. Update Cache & Return
+    if summary_text.startswith("[Error:") or summary_text.startswith("Error:"):
+        logger.error(f"Failed to get summary for {relative_file_path_str} from API: {summary_text}")
+        # Do not cache errors from the API as valid summaries
+        return summary_text # Propagate API error message
+    else:
+        logger.info(f"Successfully generated summary for {relative_file_path_str}.")
+        update_cache(cache_data, file_path, project_root, summary_text)
+        # The main logic in core_logic.py will handle saving the cache_data
+        return summary_text
+
+
 def process_file(
     file_path: Path,
     output_rel_root: Path,

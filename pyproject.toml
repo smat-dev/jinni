@@ -29,6 +29,7 @@ dependencies = [
     "pyperclip",
     "pydantic",
     "tiktoken",
+    "google-generativeai",
 ]
 
 [project.urls]
