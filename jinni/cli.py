@@ -16,6 +16,7 @@ from jinni.exceptions import ContextSizeExceededError, DetailedContextSizeError 
 from jinni.utils import ESSENTIAL_USAGE_DOC # Import the shared usage doc constant
 from jinni.utils import _translate_wsl_path # Import the WSL path translator
 from jinni.utils import ensure_no_nul
+from jinni.exclusion_parser import create_exclusion_patterns
 # ENV_VAR_SIZE_LIMIT is likely handled internally now
 import pyperclip # Added for clipboard functionality
 import tiktoken # Added for token counting
@@ -70,6 +71,28 @@ def handle_list_token_command(args):
             print(f"Error reading overrides file '{overrides_file}': {e}", file=sys.stderr)
             sys.exit(1)
 
+    # --- Process Exclusion Arguments ---
+    keep_only_modules = None
+    if args.keep_only:
+        keep_only_modules = [m.strip() for m in args.keep_only.split(',') if m.strip()]
+    
+    exclusion_patterns, exclusion_parser = create_exclusion_patterns(
+        not_keywords=args.not_keywords,
+        not_in_scoped=args.not_in_scoped,
+        not_files=args.not_files,
+        keep_only_modules=keep_only_modules
+    )
+    
+    if exclusion_patterns:
+        if override_rules_list is None:
+            # When using exclusions without an override file, we need to start with default rules
+            from jinni.config_system import DEFAULT_RULES
+            override_rules_list = list(DEFAULT_RULES)
+        override_rules_list.extend(exclusion_patterns)
+        logger.info(f"Added {len(exclusion_patterns)} exclusion patterns from CLI flags")
+        for pattern in exclusion_patterns:
+            logger.debug(f"Exclusion pattern: {pattern}")
+
     effective_target_paths = input_paths
     if input_paths == ['.'] and project_root:
          effective_target_paths = [project_root]
@@ -88,7 +111,8 @@ def handle_list_token_command(args):
             list_only=True, # Use list_only=True to get the file paths
             size_limit_mb=size_limit_mb,
             debug_explain=debug_explain,
-            include_size_in_list=False # We don't need size here
+            include_size_in_list=False, # We don't need size here
+            exclusion_parser=exclusion_parser # Add exclusion parser support
         )
 
         file_paths_relative = [line.strip() for line in file_list_str.splitlines() if line.strip()]
@@ -250,6 +274,28 @@ def handle_read_command(args):
             print(f"Error reading overrides file '{overrides_file}': {e}", file=sys.stderr)
             sys.exit(1)
 
+    # --- Process Exclusion Arguments ---
+    keep_only_modules = None
+    if args.keep_only:
+        keep_only_modules = [m.strip() for m in args.keep_only.split(',') if m.strip()]
+    
+    exclusion_patterns, exclusion_parser = create_exclusion_patterns(
+        not_keywords=args.not_keywords,
+        not_in_scoped=args.not_in_scoped,
+        not_files=args.not_files,
+        keep_only_modules=keep_only_modules
+    )
+    
+    if exclusion_patterns:
+        if override_rules_list is None:
+            # When using exclusions without an override file, we need to start with default rules
+            from jinni.config_system import DEFAULT_RULES
+            override_rules_list = list(DEFAULT_RULES)
+        override_rules_list.extend(exclusion_patterns)
+        logger.info(f"Added {len(exclusion_patterns)} exclusion patterns from CLI flags")
+        for pattern in exclusion_patterns:
+            logger.debug(f"Exclusion pattern: {pattern}")
+
     # --- Determine Effective Target Paths ---
     # If default paths=['.'] is used AND a project_root is given, target the root.
     # Otherwise, use the provided paths (or '.' if no root and no paths).
@@ -275,7 +321,8 @@ def handle_read_command(args):
             list_only=list_only,
             size_limit_mb=size_limit_mb,
             debug_explain=debug_explain,
-            include_size_in_list=args.size # Pass the CLI arg value
+            include_size_in_list=args.size, # Pass the CLI arg value
+            exclusion_parser=exclusion_parser # Add exclusion parser support
         )
 
         # --- Output ---
@@ -392,6 +439,33 @@ Examples:
         "--overrides",
         metavar="<file>",
         help="Specify an overrides file (using .contextfiles format). If provided, all .contextfiles are ignored."
+    )
+    # --- Exclusion Arguments ---
+    parser.add_argument(
+        "--not",
+        dest="not_keywords",
+        action="append",
+        metavar="<keyword>",
+        help="Exclude modules/directories matching keyword (e.g., --not tests --not vendor). Can be used multiple times."
+    )
+    parser.add_argument(
+        "--not-in", 
+        dest="not_in_scoped",
+        action="append",
+        metavar="<path:keywords>",
+        help="Exclude specific keywords within a path (e.g., --not-in src/legacy:old,deprecated). Can be used multiple times."
+    )
+    parser.add_argument(
+        "--not-files",
+        dest="not_files",
+        action="append", 
+        metavar="<pattern>",
+        help="Exclude files matching pattern (e.g., --not-files '*.test.js' --not-files '*_old.*'). Can be used multiple times."
+    )
+    parser.add_argument(
+        "--keep-only",
+        metavar="<modules>",
+        help="Keep only specified modules/directories, exclude everything else (comma-separated, e.g., --keep-only src,lib,docs)"
     )
     parser.add_argument(
         "-s",

@@ -52,7 +52,8 @@ def read_context(
     list_only: bool = False,
     size_limit_mb: Optional[int] = None,
     debug_explain: bool = False,
-    include_size_in_list: bool = False
+    include_size_in_list: bool = False,
+    exclusion_parser: Optional[Any] = None  # ExclusionParser instance for scoped exclusions
 ) -> str:
     """
     Orchestrates the context reading process, handling flexible inputs.
@@ -230,8 +231,9 @@ def read_context(
                     size_limit_bytes=size_limit_bytes - total_size_bytes, # Pass remaining budget
                     list_only=list_only,
                     include_size_in_list=include_size_in_list,
-                    debug_explain=debug_explain
+                    debug_explain=debug_explain,
                     # rule_application_root is removed
+                    exclusion_parser=exclusion_parser # Pass exclusion parser for scoped exclusions
                 )
                 output_parts.extend(dir_output_parts)
                 processed_files_set.update(dir_processed_files)

@@ -38,7 +38,8 @@ def walk_and_process(
     size_limit_bytes: int,
     list_only: bool,
     include_size_in_list: bool,
-    debug_explain: bool
+    debug_explain: bool,
+    exclusion_parser: Optional[Any] = None  # ExclusionParser instance for scoped exclusions
 ) -> Tuple[List[str], int, Set[Path]]:
     """
     Walks a directory, applies rules, processes files, and returns results.
@@ -93,10 +94,32 @@ def walk_and_process(
             # Use the globally compiled override spec
             active_spec = override_spec
             spec_source_desc = "Overrides"
+            
+            # Add scoped exclusion patterns if applicable
+            if exclusion_parser and override_spec:
+                from .config_system import compile_spec_from_rules
+                scoped_patterns = exclusion_parser.get_scoped_patterns(current_dir_path, walk_target_path)
+                if scoped_patterns:
+                    # Get the original override rules
+                    override_rules = getattr(override_spec, '_original_rules', [])
+                    if not override_rules and hasattr(override_spec, 'patterns'):
+                        # Fallback: try to get rules from patterns (this is a hack)
+                        override_rules = []
+                    
+                    # Combine base override rules with scoped patterns
+                    combined_rules = list(override_rules) + scoped_patterns
+                    active_spec = compile_spec_from_rules(combined_rules, "Overrides+ScopedExclusions")
+                    spec_source_desc = "Overrides+ScopedExclusions"
+                    
+                    if debug_explain:
+                        logger.debug(f"Applied {len(scoped_patterns)} scoped exclusion patterns to {current_dir_path}")
+                        for pattern in scoped_patterns:
+                            logger.debug(f"  Scoped pattern: {pattern}")
+            
             if debug_explain:
-                logger.debug(f"Overrides active. Using pre-compiled spec.")
+                logger.debug(f"Overrides active. Using spec: {spec_source_desc}")
                 if active_spec:
-                    logger.debug(f"Override spec patterns: {[str(p.regex) for p in active_spec.patterns]}") # Log override patterns
+                    logger.debug(f"Active spec patterns: {[str(p.regex) for p in active_spec.patterns]}") # Log patterns
         else:
             # Discover rules starting from walk_target_path downwards
             context_files_in_path = _find_context_files_for_dir(current_dir_path, walk_target_path)

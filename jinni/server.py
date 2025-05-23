@@ -74,6 +74,7 @@ async def read_context(
     list_only: bool = False,
     size_limit_mb: Optional[int] = None,
     debug_explain: bool = False,
+    exclusions: Optional[dict] = Field(default=None, description="Optional exclusion configuration. Object with 'global' (list of keywords), 'scoped' (object mapping paths to keyword lists), and 'patterns' (list of file patterns) fields."),
 ) -> str:
     logger.info("--- read_context tool invoked ---")
     # Translate incoming paths *before* any validation or Path object creation
@@ -181,6 +182,35 @@ async def read_context(
         except ValueError:
              raise ValueError(f"Tool project_root '{resolved_project_root_path}' is outside the allowed server root '{SERVER_ROOT_PATH}'")
 
+    # --- Process Exclusions ---
+    exclusion_parser = None
+    exclusion_patterns = []
+    if exclusions:
+        from jinni.exclusion_parser import ExclusionParser
+        
+        # Extract exclusion components
+        global_keywords = exclusions.get('global', [])
+        scoped_exclusions = exclusions.get('scoped', {})
+        file_patterns = exclusions.get('patterns', [])
+        
+        # Convert scoped dict to list format expected by ExclusionParser
+        scoped_list = []
+        for path, keywords in scoped_exclusions.items():
+            if isinstance(keywords, list):
+                scoped_list.append(f"{path}:{','.join(keywords)}")
+        
+        # Create exclusion parser
+        parser = ExclusionParser()
+        
+        # Parse different exclusion types
+        exclusion_patterns.extend(parser.parse_not(global_keywords))
+        exclusion_patterns.extend(parser.parse_not_in(scoped_list))
+        exclusion_patterns.extend(parser.parse_not_files(file_patterns))
+        
+        if exclusion_patterns:
+            exclusion_parser = parser
+            logger.info(f"Configured {len(exclusion_patterns)} exclusion patterns")
+
     logger.info(f"Processing project_root: {resolved_project_root_path_str}")
     # Log the final list of targets being processed
     # Log the final list of targets being processed
@@ -220,15 +250,22 @@ async def read_context(
         # Pass the validated list of target paths (or the project root if no target was given)
         # The variable resolved_target_paths_str already holds the correct list.
         effective_target_paths_str = resolved_target_paths_str
+        
+        # Combine rules with exclusion patterns
+        effective_rules = rules.copy() if rules else []
+        if exclusion_patterns:
+            effective_rules.extend(exclusion_patterns)
+        
         # Call the core logic function
         result_content = core_read_context(
             target_paths_str=effective_target_paths_str,
             project_root_str=resolved_project_root_path_str, # Pass the translated, validated root
-            override_rules=rules,
+            override_rules=effective_rules,
             list_only=list_only,
             size_limit_mb=size_limit_mb,
-            debug_explain=debug_explain # Pass flag down
+            debug_explain=debug_explain, # Pass flag down
             # include_size_in_list is False by default in core_logic if not passed
+            exclusion_parser=exclusion_parser # Pass exclusion parser for scoped exclusions
         )
         logger.debug(f"Finished processing project_root: {resolved_project_root_path_str}, targets(s): {resolved_target_paths_str}. Result length: {len(result_content)}")
 

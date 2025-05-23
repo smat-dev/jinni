@@ -98,6 +98,10 @@ Cursor can silently drop context that is larger than the allowed maximum, so if 
     *   **`list_only` (boolean, optional):** If true, returns only the list of relative file paths instead of content.
     *   **`size_limit_mb` (integer, optional):** Override the context size limit in MB.
     *   **`debug_explain` (boolean, optional):** Enable debug logging on the server.
+    *   **`exclusions` (object, optional):** Exclusion configuration with three optional fields:
+        *   **`global`** (array of strings): Keywords to exclude globally (e.g., `["tests", "deprecated"]`)
+        *   **`scoped`** (object): Map of paths to keyword arrays for scoped exclusions (e.g., `{"src/legacy": ["old", "deprecated"]}`)
+        *   **`patterns`** (array of strings): File patterns to exclude (e.g., `["*.test.js", "*_old.*"]`)
     3.  **Output:** The tool returns a single string containing the concatenated content (with headers) or the file list. Paths in headers/lists are relative to the provided `project_root`. In case of a context size error, it returns a `DetailedContextSizeError` with details about the largest files.
 
 ### MCP Server (`usage` tool)
@@ -144,6 +148,52 @@ jinni [OPTIONS] [<PATH...>]
 *   **`--debug-explain` (optional):** Print detailed inclusion/exclusion reasons to stderr and `jinni_debug.log`.
 *   **`--root <DIR>` / `-r <DIR>` (optional):** See above.
 *   **`--no-copy` (optional):** Prevent automatically copying the output content to the system clipboard when printing to standard output (the default is to copy).
+*   **`--not <keyword>` (optional, repeatable):** Exclude modules/directories matching keyword (e.g., `--not tests --not vendor`). Can be used multiple times.
+*   **`--not-in <path:keywords>` (optional, repeatable):** Exclude specific keywords within a path (e.g., `--not-in src/legacy:old,deprecated`). Can be used multiple times.
+*   **`--not-files <pattern>` (optional, repeatable):** Exclude files matching pattern (e.g., `--not-files '*.test.js' --not-files '*_old.*'`). Can be used multiple times.
+*   **`--keep-only <modules>` (optional):** Keep only specified modules/directories, exclude everything else (comma-separated, e.g., `--keep-only src,lib,docs`).
+
+### Exclusion Examples
+
+**CLI Examples:**
+
+```bash
+# Exclude all test directories
+jinni --not tests
+
+# Exclude multiple keywords
+jinni --not tests --not vendor --not deprecated
+
+# Exclude old code only in specific paths
+jinni --not-in src/legacy:old,deprecated --not-in lib/v1:legacy
+
+# Exclude specific file patterns
+jinni --not-files "*.test.js" --not-files "*_old.*"
+
+# Keep only src and docs, exclude everything else
+jinni --keep-only src,docs
+
+# Combine different exclusion types
+jinni --not tests --not-in src/experimental:wip --not-files "*.bak"
+```
+
+**MCP Examples:**
+
+```json
+{
+  "project_root": "/path/to/project",
+  "targets": [],
+  "rules": [],
+  "exclusions": {
+    "global": ["tests", "vendor"],
+    "scoped": {
+      "src/legacy": ["old", "deprecated"],
+      "lib/experimental": ["wip", "unstable"]
+    },
+    "patterns": ["*.test.js", "*_backup.*"]
+  }
+}
+```
 
 ## Installation
 

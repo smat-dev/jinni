@@ -121,6 +121,8 @@ def compile_spec_from_rules(rules: Iterable[str], source_description: str = "rul
         return pathspec.PathSpec.from_lines('gitwildmatch', [])
     try:
         spec = pathspec.PathSpec.from_lines('gitwildmatch', valid_lines)
+        # Store original rules for later use with scoped exclusions
+        spec._original_rules = list(rules)
         logger.debug(f"Compiled PathSpec from {source_description} with {len(spec.patterns)} patterns.")
         return spec
     except Exception as e:
