@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/smat-dev-jinni-badge.png)](https://mseep.ai/app/smat-dev-jinni)
+
 <img src="assets/jinni_banner_1280x640.png" alt="Jinni Banner" width="400"/>
 
 # Jinni: Bring Your Project Into Context
