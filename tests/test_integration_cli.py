@@ -127,7 +127,7 @@ def test_cli_overrides(test_environment: Path): # Renamed from test_cli_global_c
 
     # Check stderr for debug info, but not for critical errors
     assert "DEBUG:jinni.context_walker:Overrides active." in stderr
-    assert "DEBUG:jinni.context_walker:Override spec patterns:" in stderr
+    assert "DEBUG:jinni.context_walker:Active spec patterns:" in stderr
     assert "DEBUG:jinni.context_walker:FILE MATCH CHECK:" in stderr
 
 def test_cli_debug_explain(test_environment: Path):

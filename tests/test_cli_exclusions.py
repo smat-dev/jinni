@@ -129,7 +129,6 @@ class TestCLIExclusions:
         
         output_lines = stdout.strip().split('\n')
         
-        
         # Should exclude legacy and experimental only within src
         assert not any("src/legacy/" in line for line in output_lines)
         assert not any("src/experimental/" in line for line in output_lines)

@@ -83,15 +83,17 @@ def handle_list_token_command(args):
         keep_only_modules=keep_only_modules
     )
     
-    if exclusion_patterns:
+    # If we have any exclusions (including scoped ones), we need to use override mode
+    if exclusion_patterns or exclusion_parser:
         if override_rules_list is None:
             # When using exclusions without an override file, we need to start with default rules
             from jinni.config_system import DEFAULT_RULES
             override_rules_list = list(DEFAULT_RULES)
-        override_rules_list.extend(exclusion_patterns)
-        logger.info(f"Added {len(exclusion_patterns)} exclusion patterns from CLI flags")
-        for pattern in exclusion_patterns:
-            logger.debug(f"Exclusion pattern: {pattern}")
+        if exclusion_patterns:
+            override_rules_list.extend(exclusion_patterns)
+            logger.info(f"Added {len(exclusion_patterns)} exclusion patterns from CLI flags")
+            for pattern in exclusion_patterns:
+                logger.debug(f"Exclusion pattern: {pattern}")
 
     effective_target_paths = input_paths
     if input_paths == ['.'] and project_root:
@@ -286,15 +288,17 @@ def handle_read_command(args):
         keep_only_modules=keep_only_modules
     )
     
-    if exclusion_patterns:
+    # If we have any exclusions (including scoped ones), we need to use override mode
+    if exclusion_patterns or exclusion_parser:
         if override_rules_list is None:
             # When using exclusions without an override file, we need to start with default rules
             from jinni.config_system import DEFAULT_RULES
             override_rules_list = list(DEFAULT_RULES)
-        override_rules_list.extend(exclusion_patterns)
-        logger.info(f"Added {len(exclusion_patterns)} exclusion patterns from CLI flags")
-        for pattern in exclusion_patterns:
-            logger.debug(f"Exclusion pattern: {pattern}")
+        if exclusion_patterns:
+            override_rules_list.extend(exclusion_patterns)
+            logger.info(f"Added {len(exclusion_patterns)} exclusion patterns from CLI flags")
+            for pattern in exclusion_patterns:
+                logger.debug(f"Exclusion pattern: {pattern}")
 
     # --- Determine Effective Target Paths ---
     # If default paths=['.'] is used AND a project_root is given, target the root.

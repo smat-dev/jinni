@@ -97,7 +97,6 @@ def walk_and_process(
             
             # Add scoped exclusion patterns if applicable
             if exclusion_parser and override_spec:
-                from .config_system import compile_spec_from_rules
                 scoped_patterns = exclusion_parser.get_scoped_patterns(current_dir_path, walk_target_path)
                 if scoped_patterns:
                     # Get the original override rules

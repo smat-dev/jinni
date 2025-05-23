@@ -1,7 +1,7 @@
 # jinni/config_system.py
 import logging
 from pathlib import Path
-from typing import List, Optional, Iterable
+from typing import List, Iterable
 
 # Attempt to import pathspec, provide guidance if missing
 try:

@@ -258,13 +258,18 @@ class ExclusionParser:
 def create_exclusion_patterns(not_keywords: Optional[List[str]] = None,
                             not_in_scoped: Optional[List[str]] = None,
                             not_files: Optional[List[str]] = None,
-                            keep_only_modules: Optional[List[str]] = None) -> Tuple[List[str], ExclusionParser]:
+                            keep_only_modules: Optional[List[str]] = None) -> Tuple[List[str], Optional[ExclusionParser]]:
     """
     Convenience function to create exclusion patterns and return the parser instance.
     Returns: (patterns, parser_instance)
     
     The parser instance is needed for scoped exclusion lookups during traversal.
+    Returns None for parser if no exclusions are specified.
     """
+    # Check if any exclusions are provided
+    if not any([not_keywords, not_in_scoped, not_files, keep_only_modules]):
+        return [], None
+    
     parser = ExclusionParser()
     patterns = parser.combine_exclusions(not_keywords, not_in_scoped, not_files, keep_only_modules)
     return patterns, parser
