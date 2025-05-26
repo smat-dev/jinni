@@ -75,9 +75,12 @@ Cursor can silently drop context that is larger than the allowed maximum, so if 
     *   Uses a system based on `.gitignore` syntax (`pathspec` library's `gitwildmatch`).
     *   Automatically loads `.gitignore` files from the project root downward. These exclusions can be overridden by rules in `.contextfiles`.
     *   Supports hierarchical configuration using `.contextfiles` placed within your project directories. Rules are applied dynamically based on the file/directory being processed.
-    *   **Matching Behavior:** Patterns match against the path relative to the **target directory** being processed (or the project root if no specific target is given). For example, if targeting `src/`, a rule `!app.py` in `src/.contextfiles` will match `app.py`. Output paths remain relative to the original project root.
+    *   **Matching Behavior:** Patterns match against the path relative to the **target directory** being processed. Output paths remain relative to the original project root.
+    *   **Rule Root Behavior:** Each target has its own rule root:
+        *   Targets within the project root (or CWD) use the project root/CWD as their rule root
+        *   External targets use themselves as their rule root, ensuring self-contained rule sets
     *   **Overrides:** Supports `--overrides` (CLI) or `rules` (MCP) to use a specific set of rules exclusively. When overrides are active, both built-in default rules and any `.contextfiles` are ignored. Path matching for overrides is still relative to the target directory.
-    *   **Explicit Target Inclusion:** Files explicitly provided as targets are always included (bypassing rule checks, but not binary/size checks). Directories explicitly provided as targets are always entered, and rule discovery/matching then proceeds relative to that target directory.
+    *   **Explicit Target Inclusion:** Files explicitly provided as targets are always included (bypassing rule checks, but not binary/size checks).
    *   **Customizable Configuration (`.contextfiles` / Overrides):**
         *   Define precisely which files/directories to include or exclude using `.gitignore`-style patterns applied to the **relative path**.
         *   Patterns starting with `!` negate the match (an exclusion pattern). (See Configuration section below).
@@ -281,7 +284,7 @@ Only `wsl+<distro>` URIs and absolute POSIX paths (starting with `/`) are transl
 Jinni uses `.contextfiles` (or an override file) to determine which files and directories to include or exclude, based on `.gitignore`-style patterns.
 
 *   **Core Principle:** Rules are applied dynamically during traversal, relative to the current target directory being processed.
-*   **Location (`.contextfiles`):** Place `.contextfiles` in any directory. When processing a directory (either the initial target or a subdirectory), Jinni looks for `.contextfiles` starting from that directory downwards. Rules from parent directories *outside* the current target directory are ignored when processing inside that target.
+*   **Location (`.contextfiles`):** Place `.contextfiles` in any directory. Rule discovery starts from the rule root (project root for internal targets, target itself for external targets) and proceeds downward to the current directory being processed.
 *   **Format:** Plain text, UTF-8 encoded, one pattern per line.
 *   **Syntax:** Uses standard `.gitignore` pattern syntax (specifically `pathspec`'s `gitwildmatch` implementation).
     *   **Comments:** Lines starting with `#` are ignored.
@@ -293,13 +296,13 @@ Jinni uses `.contextfiles` (or an override file) to determine which files and di
 *   **Rule Application Logic:**
     1.  **Determine Target:** Jinni identifies the target directory (either explicitly provided or the project root).
     2.  **Override Check:** If `--overrides` (CLI) or `rules` (MCP) are provided, these rules are used exclusively. All `.contextfiles` and built-in defaults are ignored. Path matching is relative to the target directory.
-    3.  **Dynamic Context Rules (No Overrides):** When processing a file or subdirectory within the target directory:
-        *   Jinni finds all `.gitignore` and `.contextfiles` starting from the target directory down to the current item's directory.
-        *   Rules from `.gitignore` are applied first, then built-in defaults, and finally any `.contextfiles` (which take precedence).
+    3.  **Dynamic Context Rules (No Overrides):** When processing a file or subdirectory:
+        *   Jinni finds all `.gitignore` and `.contextfiles` starting from the rule root down to the current item's directory.
+        *   Rules are combined in order: built-in defaults, `.gitignore` rules, `.contextfiles` rules (which take precedence).
         *   It compiles these combined rules into a specification (`PathSpec`).
         *   It matches the current file/subdirectory path, calculated *relative to the target directory*, against this specification.
     4.  **Matching:** The **last pattern** in the combined rule set that matches the item's relative path determines its fate. `!` negates the match. If no user-defined pattern matches, the item is included unless it matches a built-in default exclusion (like `!.*`).
-    5.  **Target Handling:** Explicitly targeted files bypass rule checks. Explicitly targeted directories become the root for rule discovery and matching for their contents. Output paths always remain relative to the original `project_root`.
+    5.  **Target Handling:** Explicitly targeted files bypass rule checks. Output paths always remain relative to the original `project_root`.
 
 ### Examples (`.contextfiles`)
 

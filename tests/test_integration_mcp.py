@@ -223,8 +223,8 @@ async def test_mcp_read_context_target_list_mixed(test_environment: Path):
 
 
 @pytest.mark.asyncio
-async def test_mcp_target_dir_ignores_parent_rules(test_environment: Path):
-    """Test MCP targeting a dir ignores parent rules and uses local rules."""
+async def test_mcp_target_dir_uses_project_rules(test_environment: Path):
+    """Test MCP targeting a dir within project uses project root rules."""
     test_dir = test_environment
     # Root rule excludes utils.py
     (test_dir / ".contextfiles").write_text("!**/utils.py", encoding='utf-8')
@@ -235,7 +235,7 @@ async def test_mcp_target_dir_ignores_parent_rules(test_environment: Path):
     arguments = {
         "project_root": str(test_dir),
         "targets": [str(test_dir / "src")], # Target the src directory
-        "rules": [] # Use default rules discovery (relative to target)
+        "rules": [] # Use default rules discovery
     }
     result = await run_mcp_tool_call(tool_name, arguments)
 
@@ -244,24 +244,25 @@ async def test_mcp_target_dir_ignores_parent_rules(test_environment: Path):
     assert len(result.content) == 1 and isinstance(result.content[0], types.TextContent)
     stdout_text = result.content[0].text
 
-    # Expected includes based on rules relative to src:
+    # Expected behavior: src is within project root, so rules start from project root
+    # Expected includes:
     # - app.py (included by default *)
-    # - utils.py (included by default *, root !**/utils.py ignored)
     # - nested/deep.py (included by default *)
     # - nested/other.txt (included by default *)
     # Expected excludes:
+    # - utils.py (excluded by root !**/utils.py)
     # - data.json (excluded by src/.contextfiles !data.json)
-    # - .hidden_in_src (excluded by default !.* relative to src)
+    # - .hidden_in_src (excluded by default !.*)
 
     # Check included
     assert "```path=src/app.py" in stdout_text
-    assert "```path=src/utils.py" in stdout_text # Should be included now
     assert "```path=src/nested/deep.py" in stdout_text
     assert "```path=src/nested/other.txt" in stdout_text
 
     # Check excluded
+    assert "```path=src/utils.py" not in stdout_text # Excluded by root rule
     assert "```path=src/data.json" not in stdout_text # Excluded by local rule
-    assert "```path=src/.hidden_in_src" not in stdout_text # Excluded by default rule relative to src
+    assert "```path=src/.hidden_in_src" not in stdout_text # Excluded by default rule
 
     # Check files outside target are not included
     assert "```path=main.py" not in stdout_text

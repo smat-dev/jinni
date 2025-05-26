@@ -1,0 +1,46 @@
+{
+  "name": "jinni-dev",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12",
+      "installTools": true
+    }
+  },
+  "postCreateCommand": "uv pip install -e . && uv pip install -e ./jinni-server-pkg && echo 'Development container ready for Jinni project'",
+  "runArgs": [
+    "--init"
+  ],
+  "shutdownAction": "none",
+  "mounts": [
+    "source=jinni_cache,target=/home/vscode/.cache,type=volume",
+    "source=jinni_home,target=/home/vscode,type=volume"
+  ],
+  "forwardPorts": [
+    5173
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "charliermarsh.ruff",
+        "anthropic.claude-code" // pre-installs the VS Code extension
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": false,
+        "python.formatting.provider": "black",
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter"
+        }
+      }
+    }
+  },
+  "remoteUser": "vscode"
+}

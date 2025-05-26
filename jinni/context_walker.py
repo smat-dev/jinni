@@ -21,16 +21,15 @@ from .config_system import (
     CONTEXT_FILENAME,
 )
 from .utils import _find_context_files_for_dir, _find_gitignore_files_for_dir
-from .file_processor import process_file # Assuming file_processor.py exists
-from .exceptions import ContextSizeExceededError # Assuming exceptions.py exists
+from .file_processor import process_file
+from .exceptions import ContextSizeExceededError
 
 # Setup logger for this module
 logger = logging.getLogger("jinni.context_walker")
-if not logger.handlers and not logging.getLogger().handlers:
-     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 def walk_and_process(
-    walk_target_path: Path, # The directory path to start walking from AND the root for rule discovery/matching
+    walk_target_path: Path, # The directory path to start walking from
+    rule_root: Path, # The root for rule discovery - no rules above this point will be considered
     output_rel_root: Path, # Root for calculating final relative output paths
     initial_target_paths_set: Set[Path], # Set of explicitly provided targets (for always-include logic)
     use_overrides: bool,
@@ -45,9 +44,9 @@ def walk_and_process(
     Walks a directory, applies rules, processes files, and returns results.
 
     Args:
-        walk_target_path: The directory path to start walking from. This path also serves
-                          as the root for discovering `.contextfiles` and for calculating
-                          relative paths for rule matching (both default and override rules).
+        walk_target_path: The directory path to start walking from.
+        rule_root: The root for rule discovery - no rules above this point will be considered.
+                   This ensures that external targets have self-contained rule sets.
         output_rel_root: The root directory for calculating the final relative output paths
                          that appear in headers or the list output.
         initial_target_paths_set: Set of absolute paths provided as initial targets.
@@ -57,6 +56,7 @@ def walk_and_process(
         list_only: If True, only collect file paths.
         include_size_in_list: If True and list_only, prepend size to path.
         debug_explain: If True, log detailed processing steps.
+        exclusion_parser: ExclusionParser instance for scoped exclusions.
 
     Returns:
         A tuple containing:
@@ -91,12 +91,12 @@ def walk_and_process(
         if debug_explain: logger.debug(f"Path matching relative to: {path_match_root}")
 
         # Always discover rules from contextfiles and gitignore
-        context_files_in_path = _find_context_files_for_dir(current_dir_path, walk_target_path)
-        gitignore_files_in_path = _find_gitignore_files_for_dir(current_dir_path, walk_target_path)
+        context_files_in_path = _find_context_files_for_dir(current_dir_path, rule_root)
+        gitignore_files_in_path = _find_gitignore_files_for_dir(current_dir_path, rule_root)
         
         if debug_explain:
-            logger.debug(f"Found context files for {current_dir_path} (relative to {walk_target_path}): {context_files_in_path}")
-            logger.debug(f"Found gitignore files for {current_dir_path} (relative to {walk_target_path}): {gitignore_files_in_path}")
+            logger.debug(f"Found context files for {current_dir_path} (relative to {rule_root}): {context_files_in_path}")
+            logger.debug(f"Found gitignore files for {current_dir_path} (relative to {rule_root}): {gitignore_files_in_path}")
 
         # Combine default rules, gitignore rules, and rules from discovered files
         current_rules = list(DEFAULT_RULES)  # Start with defaults
@@ -120,7 +120,7 @@ def walk_and_process(
 
         # Add scoped exclusion patterns if applicable
         if exclusion_parser:
-            scoped_patterns = exclusion_parser.get_scoped_patterns(current_dir_path, walk_target_path)
+            scoped_patterns = exclusion_parser.get_scoped_patterns(current_dir_path, rule_root)
             if scoped_patterns:
                 current_rules.extend(scoped_patterns)
                 if debug_explain:

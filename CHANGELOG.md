@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-05-26
+
 ### Changed
+- **BREAKING**: Rule root behavior has been updated. Each target now has its own rule root:
+  - Targets within the project root (or CWD) use the project root/CWD as their rule root
+  - External targets use themselves as their rule root, ensuring self-contained rule sets
+  - This means when targeting a subdirectory within a project, parent `.contextfiles` and `.gitignore` files are now considered
+- Exclusion rules from `--not`, `--not-in`, `--not-files`, and `--keep-only` flags are now added as high-priority rules rather than replacing existing rules
 - Changed context output header to ````path=<path>` format, followed by file content enclosed in triple backticks, to reduce token usage. Removed size and last modified time from the header.
 
 ### Added
@@ -19,8 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Environment variable `JINNI_ASSUME_WSL_DISTRO` allows overriding the automatically detected default distro for the manual fallback.
 - Added support for stripping `vscode-remote://wsl.localhost/Distro/...` URIs to `/...` on non-Windows platforms.
 - Context gathering now respects `.gitignore` files (lower priority than `.contextfiles`).
-
-### Changed
 - If you install WSL while Jinni is running, restart Jinni to pick up the new `wslpath`.
 - WSL path translation (`_translate_wsl_path`) now raises `ValueError` for malformed WSL URIs missing a distribution name (e.g., `vscode-remote://wsl+/...`).
 - WSL path translation (`_translate_wsl_path`) now raises `RuntimeError` on Windows if a POSIX path is given but cannot be translated (e.g., `wslpath` fails and manual fallback also fails due to no WSL/distro found or constructed path not existing).

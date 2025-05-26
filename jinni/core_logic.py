@@ -28,16 +28,12 @@ from .exceptions import (
 )
 from .utils import (
     get_large_files,
-    # get_usage_doc removed as it's no longer used
-    _find_context_files_for_dir, # Needed by context_walker, but keep import here for now? No, walker imports it.
 )
 from .file_processor import process_file
 from .context_walker import walk_and_process
 
 # Setup logger for this module
 logger = logging.getLogger("jinni.core_logic")
-if not logger.handlers and not logging.getLogger().handlers:
-     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # --- Constants ---
 DEFAULT_SIZE_LIMIT_MB = 100
@@ -185,61 +181,89 @@ def read_context(
     # Use the resolved target_paths as the initial set for "always include" logic within walker/processor
     initial_target_paths_set: Set[Path] = set(target_paths)
 
+    # --- Compute a root for each target ---
+    roots_for_target: Dict[Path, Path] = {}
+    
+    # Determine the base for comparison (project root or CWD)
+    comparison_base = project_root_path if project_root_path else Path.cwd().resolve()
+    
+    for tp in target_paths:
+        try:
+            # Check if target is within the comparison base
+            if tp.is_relative_to(comparison_base):
+                root = comparison_base  # Use project root (or CWD) for targets within it
+            else:
+                root = tp if tp.is_dir() else tp.parent  # External targets are self-contained
+        except AttributeError:  # Python < 3.9 fallback
+            if str(tp).startswith(str(comparison_base)):
+                root = comparison_base
+            else:
+                root = tp if tp.is_dir() else tp.parent
+        roots_for_target[tp] = root
+        if debug_explain: logger.debug(f"Target {tp} will use rule root: {root}")
+
     # --- Delegate Processing ---
     try:
-        for current_target_path in target_paths:
-            # Skip if already processed (e.g., listed twice or handled by a previous dir walk)
-            if current_target_path in processed_files_set:
-                 if debug_explain: logger.debug(f"Skipping target {current_target_path} as it was already processed.")
-                 continue
+        # Group targets by their root and walk once per root
+        for root in set(roots_for_target.values()):
+            # Collect targets that belong to this root
+            grouped = [t for t, r in roots_for_target.items() if r == root]
+            
+            # Build an "always include" set for this root
+            initial_set = set(grouped)
+            
+            for current_target_path in grouped:
+                # Skip if already processed (e.g., listed twice or handled by a previous dir walk)
+                if current_target_path in processed_files_set:
+                     if debug_explain: logger.debug(f"Skipping target {current_target_path} as it was already processed.")
+                     continue
 
-            if current_target_path.is_file():
-                if debug_explain: logger.debug(f"Processing file target: {current_target_path}")
-                file_output, file_size_added = process_file(
-                    file_path=current_target_path,
-                    output_rel_root=output_rel_root,
-                    size_limit_bytes=size_limit_bytes,
-                    total_size_bytes=total_size_bytes,
-                    list_only=list_only,
-                    include_size_in_list=include_size_in_list,
-                    debug_explain=debug_explain
-                )
-                if file_output is not None:
-                    # Check if adding this file *content* exceeds limit (only if not list_only)
-                    if not list_only and (total_size_bytes + file_size_added > size_limit_bytes):
-                         # Check if file alone exceeds limit
-                         if file_size_added > size_limit_bytes and total_size_bytes == 0:
-                              logger.warning(f"File {current_target_path} ({file_size_added} bytes) content exceeds size limit of {effective_limit_mb}MB. Skipping.")
-                              continue # Skip this file
-                         else:
-                              # Adding this file pushes over the limit
-                              raise ContextSizeExceededError(effective_limit_mb, total_size_bytes + file_size_added, current_target_path)
+                if current_target_path.is_file():
+                    if debug_explain: logger.debug(f"Processing file target: {current_target_path}")
+                    file_output, file_size_added = process_file(
+                        file_path=current_target_path,
+                        output_rel_root=output_rel_root,  # Use the original output root
+                        size_limit_bytes=size_limit_bytes,
+                        total_size_bytes=total_size_bytes,
+                        list_only=list_only,
+                        include_size_in_list=include_size_in_list,
+                        debug_explain=debug_explain
+                    )
+                    if file_output is not None:
+                        # Check if adding this file *content* exceeds limit (only if not list_only)
+                        if not list_only and (total_size_bytes + file_size_added > size_limit_bytes):
+                             # Check if file alone exceeds limit
+                             if file_size_added > size_limit_bytes and total_size_bytes == 0:
+                                  logger.warning(f"File {current_target_path} ({file_size_added} bytes) content exceeds size limit of {effective_limit_mb}MB. Skipping.")
+                                  continue # Skip this file
+                             else:
+                                  # Adding this file pushes over the limit
+                                  raise ContextSizeExceededError(effective_limit_mb, total_size_bytes + file_size_added, current_target_path)
 
-                    output_parts.append(file_output)
-                    processed_files_set.add(current_target_path)
-                    total_size_bytes += file_size_added # Add size only if content included
+                        output_parts.append(file_output)
+                        processed_files_set.add(current_target_path)
+                        total_size_bytes += file_size_added # Add size only if content included
 
-            elif current_target_path.is_dir():
-                if debug_explain: logger.debug(f"Processing directory target: {current_target_path}")
-                dir_output_parts, dir_total_size, dir_processed_files = walk_and_process(
-                    walk_target_path=current_target_path, # This is now the root for rule discovery/matching
-                    # rule_discovery_root is removed
-                    output_rel_root=output_rel_root, # Still needed for final output paths
-                    initial_target_paths_set=initial_target_paths_set, # Pass initial targets
-                    use_overrides=use_overrides,
-                    override_spec=override_spec,
-                    size_limit_bytes=size_limit_bytes - total_size_bytes, # Pass remaining budget
-                    list_only=list_only,
-                    include_size_in_list=include_size_in_list,
-                    debug_explain=debug_explain,
-                    # rule_application_root is removed
-                    exclusion_parser=exclusion_parser # Pass exclusion parser for scoped exclusions
-                )
-                output_parts.extend(dir_output_parts)
-                processed_files_set.update(dir_processed_files)
-                total_size_bytes += dir_total_size # Accumulate size from walker
-            else:
-                 logger.warning(f"Target path is neither a file nor a directory: {current_target_path}")
+                elif current_target_path.is_dir():
+                    if debug_explain: logger.debug(f"Processing directory target: {current_target_path}")
+                    dir_output_parts, dir_total_size, dir_processed_files = walk_and_process(
+                        walk_target_path=current_target_path,
+                        rule_root=root,  # Pass the rule root for this target
+                        output_rel_root=output_rel_root, # Keep original output root for consistent paths
+                        initial_target_paths_set=initial_set, # Pass initial targets for this root
+                        use_overrides=use_overrides,
+                        override_spec=override_spec,
+                        size_limit_bytes=size_limit_bytes - total_size_bytes, # Pass remaining budget
+                        list_only=list_only,
+                        include_size_in_list=include_size_in_list,
+                        debug_explain=debug_explain,
+                        exclusion_parser=exclusion_parser # Pass exclusion parser for scoped exclusions
+                    )
+                    output_parts.extend(dir_output_parts)
+                    processed_files_set.update(dir_processed_files)
+                    total_size_bytes += dir_total_size # Accumulate size from walker
+                else:
+                     logger.warning(f"Target path is neither a file nor a directory: {current_target_path}")
 
         # --- Final Output Formatting ---
         final_output = "\n".join(output_parts) if list_only else SEPARATOR.join(output_parts)

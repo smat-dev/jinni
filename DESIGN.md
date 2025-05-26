@@ -14,13 +14,16 @@ This document details the internal design of the `jinni` MCP Server, `jinni` CLI
     *   Utilizes `os.walk(topdown=True)` for recursive traversal starting from one or more target paths provided by the user.
     *   Symbolic links encountered during traversal will be **skipped**.
    *   **Filtering (Dynamic Rule Application):**
-       *   Determines the `walk_target_path` (explicit target directory or project root). This path serves as the root for rule discovery and path matching.
+       *   Determines the `rule_root` for each target:
+           *   Targets within the project root (or CWD if no project root) use the project root/CWD as their rule root
+           *   External targets (outside project root/CWD) use themselves as rule root
        *   Determines the `output_rel_root` (explicit project root or common ancestor) for final output path relativity.
-       *   For each directory visited during `os.walk` starting from `walk_target_path`:
+       *   For each directory visited during `os.walk`:
            *   If overrides are active (CLI `--overrides` or MCP `rules`): Uses a pre-compiled `PathSpec` based exclusively on the provided override rules. Path matching is relative to `walk_target_path`.
-           *   If no overrides: Finds relevant `.contextfiles` from `walk_target_path` down to the current directory, loads rules, combines with defaults, and compiles a `PathSpec` specific to that directory's context. Path matching is relative to `walk_target_path`.
+           *   If no overrides: Finds relevant `.contextfiles` from `rule_root` down to the current directory, loads rules, combines with defaults, and compiles a `PathSpec` specific to that directory's context. Path matching is relative to `walk_target_path`.
        *   Applies the active `PathSpec` to filter files and prune subdirectories.
-       *   **Explicit Target Inclusion:** Explicitly provided file targets bypass rule checks (but not binary/size checks). Explicitly provided directory targets become the `walk_target_path` (root for rule discovery/matching).
+       *   **Explicit Target Inclusion:** Explicitly provided file targets bypass rule checks (but not binary/size checks).
+       *   **Rule Root Isolation:** Each target has its own rule root, ensuring external targets have self-contained rule sets.
        *   Handles `list_only` flag.
 *   **File Reading:**
     *   Attempts multiple encodings (UTF-8, Latin-1, CP1252).
@@ -73,22 +76,22 @@ This document details the internal design of the `jinni` MCP Server, `jinni` CLI
         *   `compile_spec_from_rules(rules_list)`: Compiles a list of rule strings into a `pathspec.PathSpec` object.
     *   Defines `DEFAULT_RULES` (common excludes like `.git/`, `node_modules/`, etc.).
 *   **Rule Application Logic (`context_walker.py`):**
-    1.  **Determine Target Root:** The `walk_target_path` (explicit target directory or project root) is established as the root for rule discovery and path matching.
+    1.  **Determine Rule Root:** The `rule_root` is passed from `core_logic.py` based on target location (project root for internal targets, self for external).
     2.  **Override Check:** Determines if override rules are provided (CLI `--overrides <file>` or MCP `rules` argument).
     3.  **Dynamic Spec Generation (During `os.walk`):** For each directory visited:
-        *   Finds all `.contextfiles` and `.gitignore` files starting from `walk_target_path` down to the current directory.
+        *   Finds all `.contextfiles` and `.gitignore` files starting from `rule_root` down to the current directory (no rules above `rule_root` are considered).
         *   Loads rules from these files.
         *   Combines rules in order:
             *   `DEFAULT_RULES` (common excludes like `.git/`, `node_modules/`, etc.)
             *   `.gitignore` rules (converted to Jinni-style patterns)
-            *   `.contextfiles` rules (respecting order: target root rules first, current dir rules last)
+            *   `.contextfiles` rules (respecting order: root rules first, current dir rules last)
             *   **If overrides are provided:** Override rules are added as high-priority rules at the end
         *   Compiles a new `PathSpec` object specific to this directory's context.
     4.  **Filtering Decision:**
         *   The active `PathSpec` for the current directory is used to match files and subdirectories.
         *   The path used for matching is calculated **relative to `walk_target_path`**.
         *   Standard `pathspec` matching applies (last matching pattern wins, `!` negates). If no user-defined pattern matches, the item is included unless it matches a built-in default exclusion. If no pattern matches at all, it's included.
-    5.  **Explicit Target Inclusion:** Explicitly provided file targets bypass rule checks (but not binary/size checks). Explicitly provided directory targets become the `walk_target_path`.
+    5.  **Explicit Target Inclusion:** Explicitly provided file targets bypass rule checks (but not binary/size checks).
     6.  **Directory Pruning:** During `os.walk` (`topdown=True`), subdirectories are checked against the active `PathSpec` (using the path relative to `walk_target_path`). If a subdirectory doesn't match (is excluded) and wasn't an explicit target, it's removed from `dirnames` to prevent traversal.
     7.  **Output Path Relativity:** Final output paths (in headers or list mode) are always calculated relative to the original `output_rel_root` determined in `core_logic.py`.
 

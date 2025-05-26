@@ -188,8 +188,8 @@ def test_cli_project_root(test_environment: Path):
     assert f"```path={test_dir.name}/src/app.py" in stdout_parent # Relative to root (parent)
 
 
-def test_cli_target_dir_ignores_parent_rules(test_environment: Path):
-    """Test CLI targeting a dir ignores parent rules and uses local rules."""
+def test_cli_target_dir_uses_project_rules(test_environment: Path):
+    """Test CLI targeting a dir within project uses project root rules."""
     test_dir = test_environment
     # Root rule excludes utils.py
     (test_dir / CONTEXT_FILENAME).write_text("!**/utils.py", encoding='utf-8')
@@ -199,24 +199,25 @@ def test_cli_target_dir_ignores_parent_rules(test_environment: Path):
     # Run targeting the src directory, with project root set to test_dir
     stdout, stderr = run_jinni_cli(["-r", str(test_dir), str(test_dir / "src"), "--debug-explain"])
 
-    # Expected includes based on rules relative to src:
+    # Expected behavior: src is within project root, so rules start from project root
+    # Expected includes:
     # - app.py (included by default *)
-    # - utils.py (included by default *, root !**/utils.py ignored)
     # - nested/deep.py (included by default *)
     # - nested/other.txt (included by default *)
     # Expected excludes:
+    # - utils.py (excluded by root !**/utils.py)
     # - data.json (excluded by src/.contextfiles !data.json)
-    # - .hidden_in_src (excluded by default !.* relative to src)
+    # - .hidden_in_src (excluded by default !.*)
 
     # Check included
     assert "```path=src/app.py" in stdout
-    assert "```path=src/utils.py" in stdout # Should be included now
     assert "```path=src/nested/deep.py" in stdout
     assert "```path=src/nested/other.txt" in stdout
 
     # Check excluded
+    assert "```path=src/utils.py" not in stdout # Excluded by root rule
     assert "```path=src/data.json" not in stdout # Excluded by local rule
-    assert "```path=src/.hidden_in_src" not in stdout # Excluded by default rule relative to src
+    assert "```path=src/.hidden_in_src" not in stdout # Excluded by default rule
 
     # Check files outside target are not included
     assert "```path=main.py" not in stdout

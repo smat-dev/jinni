@@ -272,7 +272,7 @@ def test_read_context_target_file(test_dir: Path):
 
 def test_read_context_target_dir(test_dir: Path):
     """Test processing a specific target directory within the project root."""
-    # Add a rule in the root context file to test that it's ignored when targeting src
+    # Add a rule in the root context file that should apply when targeting src
     (test_dir / CONTEXT_FILENAME).write_text("!**/utils.py", encoding='utf-8')
     # Add a context file inside the target directory
     (test_dir / "src" / CONTEXT_FILENAME).write_text("!data.json", encoding='utf-8') # Exclude data.json locally
@@ -280,17 +280,17 @@ def test_read_context_target_dir(test_dir: Path):
     # Target src directory directly, root is project
     content = run_read_context_helper(project_root_rel="project", tmp_path=test_dir.parent, target_rel="project/src")
 
-    # Files inside should be processed relative to the target (src),
-    # discovering rules starting from src downwards.
+    # Files inside should be processed with rules from project root downwards
+    # since src is within the project.
     # Output paths are still relative to the original project root.
     assert "```path=src/app.py" in content
-    # utils.py should now be INCLUDED because the root rule !**/utils.py is ignored
-    assert "```path=src/utils.py" in content
+    # utils.py should be EXCLUDED because the root rule !**/utils.py applies
+    assert "```path=src/utils.py" not in content
     # data.json should be EXCLUDED by the local src/.contextfiles
     assert "```path=src/data.json" not in content
     assert "```path=src/nested/deep.py" in content
     assert "```path=src/nested/other.txt" in content
-    # Hidden file should still be excluded by default rules applied relative to src
+    # Hidden file should still be excluded by default rules
     assert "```path=src/.hidden_in_src" not in content
     # Files outside target dir src/ should not be included
     assert "```path=main.py" not in content
