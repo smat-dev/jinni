@@ -102,8 +102,9 @@ def test_cli_overrides(test_environment: Path): # Renamed from test_cli_global_c
     # Use --overrides with project root
     stdout, stderr = run_jinni_cli(["-r", str(test_dir), "--overrides", str(overrides_path), "--no-copy", "--debug-explain"])
 
-    # Expected includes based ONLY on override rules + defaults:
-    # Overrides: *.py, !main.py, dir_b/, README.md
+    # Expected includes based on contextfiles + override rules + defaults:
+    # Contextfiles include: file_root.txt, *.md, main.py, src/, dir_c/, dir_e/, dir_f/
+    # Overrides add: **/*.py, !main.py, dir_b/, lib/**, README.md, src/
     # Defaults exclude: .*, build/, etc.
 
     # Check included
@@ -116,17 +117,18 @@ def test_cli_overrides(test_environment: Path): # Renamed from test_cli_global_c
 
     # Check excluded
     assert "```path=main.py" not in stdout # Excluded by override !main.py
-    assert "```path=file_root.txt" not in stdout # Excluded because .contextfiles are ignored by overrides
-    assert "```path=dir_a/important.log" not in stdout # Excluded because .contextfiles are ignored by overrides
-    assert "```path=dir_c/file_c1.txt" not in stdout # Excluded because .contextfiles are ignored by overrides
-    assert "```path=dir_f/file_f.txt" not in stdout # Excluded because .contextfiles are ignored by overrides
-    assert "```path=docs/index.md" not in stdout # Excluded because .contextfiles are ignored by overrides
+    # With the new design, .contextfiles are still respected when using overrides
+    assert "```path=file_root.txt" in stdout # Included by .contextfiles
+    assert "```path=dir_a/important.log" in stdout # Included by .contextfiles in dir_a
+    assert "```path=dir_c/file_c1.txt" in stdout # Included by .contextfiles (dir_c/)
+    assert "```path=dir_f/file_f.txt" in stdout # Included by .contextfiles (dir_f/)
+    assert "```path=docs/index.md" in stdout # Included by .contextfiles (*.md matches at any depth)
     assert "config.yaml" not in stdout # Not included by override rules
     assert ".env" not in stdout # Excluded by default
     assert "build/" not in stdout # Excluded by default
 
     # Check stderr for debug info, but not for critical errors
-    assert "DEBUG:jinni.context_walker:Overrides active." in stderr
+    assert "INFO:jinni.core_logic:Override rules provided as high-priority additions to normal rules." in stderr
     assert "DEBUG:jinni.context_walker:Active spec patterns:" in stderr
     assert "DEBUG:jinni.context_walker:FILE MATCH CHECK:" in stderr
 
@@ -138,9 +140,9 @@ def test_cli_debug_explain(test_environment: Path):
     # Check stderr for expected explanation patterns (may need adjustment based on exact logging)
     # Look for dynamic spec source descriptions
     assert "DEBUG:jinni.context_walker:Compiled spec for" in stderr # Check for log from context_walker
-    assert "from Gitignore+context files at root" in stderr  # Root context
-    assert "from Gitignore+context files up to ./src" in stderr  # Src context
-    assert "from Gitignore+context files up to ./dir_a" in stderr  # Dir_a context
+    assert "from Default+Gitignore+Contextfiles at root" in stderr  # Root context
+    assert "from Default+Gitignore+Contextfiles up to ./src" in stderr  # Src context
+    assert "from Default+Gitignore+Contextfiles up to ./dir_a" in stderr  # Dir_a context
 
     # Check specific inclusion/exclusion reasons based on the dynamic context
     # Check for the log message from the context walker module
@@ -149,12 +151,12 @@ def test_cli_debug_explain(test_environment: Path):
     assert "DEBUG:jinni.context_walker:Pruning Directory" in stderr # Check context_walker logger
 
     # Example specific checks (adapt based on actual log output)
-    assert "Including File: " in stderr and "file_root.txt" in stderr and "Gitignore+context files at root" in stderr
-    assert "Excluding File: " in stderr and "root.log" in stderr and "Gitignore+context files at root" in stderr
-    assert "Including File: " in stderr and "src/app.py" in stderr and "Gitignore+context files up to ./src" in stderr
-    assert "Excluding File: " in stderr and "dir_a/file_a1.txt" in stderr and "Gitignore+context files up to ./dir_a" in stderr
-    assert "Including File: " in stderr and "dir_a/important.log" in stderr and "Gitignore+context files up to ./dir_a" in stderr
-    assert "Keeping Directory: " in stderr and "dir_b" in stderr and "Gitignore+context files at root" in stderr
+    assert "Including File: " in stderr and "file_root.txt" in stderr and "Default+Gitignore+Contextfiles at root" in stderr
+    assert "Excluding File: " in stderr and "root.log" in stderr and "Default+Gitignore+Contextfiles at root" in stderr
+    assert "Including File: " in stderr and "src/app.py" in stderr and "Default+Gitignore+Contextfiles up to ./src" in stderr
+    assert "Excluding File: " in stderr and "dir_a/file_a1.txt" in stderr and "Default+Gitignore+Contextfiles up to ./dir_a" in stderr
+    assert "Including File: " in stderr and "dir_a/important.log" in stderr and "Default+Gitignore+Contextfiles up to ./dir_a" in stderr
+    assert "Keeping Directory: " in stderr and "dir_b" in stderr and "Default+Gitignore+Contextfiles at root" in stderr
 
     # Check stdout is still correct (same as test_cli_with_contextfiles)
     assert "```path=file_root.txt" in stdout

@@ -173,8 +173,8 @@ def read_context(
     if use_overrides:
         if pathspec is None:
              raise ImportError("pathspec library is required for override rules but not installed.")
-        logger.info("Override rules provided. Ignoring all .contextfiles.")
-        # When overriding, use ONLY the provided rules, not combined with defaults
+        logger.info("Override rules provided as high-priority additions to normal rules.")
+        # Store the override rules for later use in the walker
         override_spec = compile_spec_from_rules(override_rules, "Overrides")
         if debug_explain: logger.debug(f"Compiled override spec with {len(override_spec.patterns)} patterns.")
 

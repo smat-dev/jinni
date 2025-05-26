@@ -276,3 +276,101 @@ class TestCLIExclusions:
         # Should exclude other modules
         assert not any("tests/" in line for line in output_lines)
         assert not any("vendor/" in line for line in output_lines)
+    
+    def test_not_respects_gitignore_and_defaults(self):
+        """Test that --not* flags respect .gitignore and default exclusions."""
+        import tempfile
+        import shutil
+        
+        # Create a fresh test directory
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_dir = Path(tmpdir)
+            
+            # Create directory structure
+            (test_dir / "src").mkdir()
+            (test_dir / "tests").mkdir()
+            (test_dir / "node_modules").mkdir()
+            (test_dir / "build").mkdir()
+            (test_dir / ".git").mkdir()
+            
+            # Create files
+            (test_dir / "src" / "main.py").write_text("Main code", encoding="utf-8")
+            (test_dir / "src" / "utils.py").write_text("Utils", encoding="utf-8")
+            (test_dir / "tests" / "test_main.py").write_text("Tests", encoding="utf-8")
+            (test_dir / "node_modules" / "package.js").write_text("Node package", encoding="utf-8")
+            (test_dir / "build" / "output.js").write_text("Build output", encoding="utf-8")
+            (test_dir / ".git" / "config").write_text("Git config", encoding="utf-8")
+            (test_dir / "README.md").write_text("Readme", encoding="utf-8")
+            
+            # Create .gitignore that excludes build/
+            (test_dir / ".gitignore").write_text("build/\n", encoding="utf-8")
+            
+            # Also add a file that would be excluded by default rules but isn't in our test directories
+            (test_dir / "backup.bak").write_text("Backup file", encoding="utf-8")
+            
+            # Test with explicit target and --not flag
+            stdout, stderr = run_jinni_cli([
+                str(test_dir),
+                "--not", "tests", 
+                "-l"
+            ])
+            
+            output_lines = stdout.strip().split('\n')
+            print(f"Output lines: {output_lines}")  # Debug output
+            
+            # Should include src files
+            assert any("src/main.py" in line for line in output_lines)
+            assert any("src/utils.py" in line for line in output_lines)
+            assert any("README.md" in line for line in output_lines)
+            
+            # Should exclude tests (from --not)
+            assert not any("tests/test_main.py" in line for line in output_lines)
+            
+            # Should still respect default exclusions (node_modules, .git)
+            assert not any("node_modules/package.js" in line for line in output_lines)
+            assert not any(".git/config" in line for line in output_lines)
+            
+            # Should still respect .gitignore (build/)
+            assert not any("build/output.js" in line for line in output_lines)
+            
+            # Should still respect default exclusions (.bak files)
+            assert not any("backup.bak" in line for line in output_lines)
+    
+    def test_not_respects_contextfiles(self, tmp_path: Path):
+        """Test that --not commands respect .contextfiles"""
+        # Create test structure
+        structure = {
+            "README.md": "# Main readme",
+            ".contextfiles": "!legacy/\n!deprecated/",
+            "legacy": {
+                "old.py": "# Should be excluded by contextfiles"
+            },
+            "deprecated": {
+                "code.py": "# Should be excluded by contextfiles"
+            },
+            "src": {
+                "main.py": "# Main source",
+                "utils.py": "# Utilities",
+                "test_utils.py": "# Test file to exclude"
+            }
+        }
+        create_project_structure(tmp_path, structure)
+        
+        # Run jinni with --not test
+        stdout, stderr = run_jinni_cli([
+            "--not", "test",
+            "--list-only",
+            str(tmp_path)
+        ])
+        
+        # Should include only files not caught by contextfiles or the --not pattern
+        output_lines = stdout.strip().split('\n')
+        assert "README.md" in output_lines
+        assert "src/main.py" in output_lines
+        assert "src/utils.py" in output_lines
+        
+        # These should be excluded
+        assert "legacy/old.py" not in output_lines
+        assert "deprecated/code.py" not in output_lines
+        assert "src/test_utils.py" not in output_lines
+    

@@ -90,69 +90,69 @@ def walk_and_process(
         path_match_root = walk_target_path
         if debug_explain: logger.debug(f"Path matching relative to: {path_match_root}")
 
+        # Always discover rules from contextfiles and gitignore
+        context_files_in_path = _find_context_files_for_dir(current_dir_path, walk_target_path)
+        gitignore_files_in_path = _find_gitignore_files_for_dir(current_dir_path, walk_target_path)
+        
+        if debug_explain:
+            logger.debug(f"Found context files for {current_dir_path} (relative to {walk_target_path}): {context_files_in_path}")
+            logger.debug(f"Found gitignore files for {current_dir_path} (relative to {walk_target_path}): {gitignore_files_in_path}")
+
+        # Combine default rules, gitignore rules, and rules from discovered files
+        current_rules = list(DEFAULT_RULES)  # Start with defaults
+        
+        # Add gitignore rules
+        for gi_path in gitignore_files_in_path:
+            current_rules.extend(load_gitignore_as_context_rules(gi_path))
+        
+        # Add context files rules
+        for cf_path in context_files_in_path:
+            current_rules.extend(load_rules_from_file(cf_path))
+
+        # If we have overrides, add them as high-priority rules at the end
         if use_overrides:
-            # Use the globally compiled override spec
-            active_spec = override_spec
-            spec_source_desc = "Overrides"
-            
-            # Add scoped exclusion patterns if applicable
-            if exclusion_parser and override_spec:
-                scoped_patterns = exclusion_parser.get_scoped_patterns(current_dir_path, walk_target_path)
-                if scoped_patterns:
-                    # Get the original override rules
-                    override_rules = getattr(override_spec, '_original_rules', [])
-                    if not override_rules and hasattr(override_spec, 'patterns'):
-                        # Fallback: try to get rules from patterns (this is a hack)
-                        override_rules = []
-                    
-                    # Combine base override rules with scoped patterns
-                    combined_rules = list(override_rules) + scoped_patterns
-                    active_spec = compile_spec_from_rules(combined_rules, "Overrides+ScopedExclusions")
-                    spec_source_desc = "Overrides+ScopedExclusions"
-                    
-                    if debug_explain:
-                        logger.debug(f"Applied {len(scoped_patterns)} scoped exclusion patterns to {current_dir_path}")
-                        for pattern in scoped_patterns:
-                            logger.debug(f"  Scoped pattern: {pattern}")
-            
+            override_rules = getattr(override_spec, '_original_rules', [])
+            if not override_rules and hasattr(override_spec, 'patterns'):
+                override_rules = []
+            current_rules.extend(override_rules)
             if debug_explain:
-                logger.debug(f"Overrides active. Using spec: {spec_source_desc}")
-                if active_spec:
-                    logger.debug(f"Active spec patterns: {[str(p.regex) for p in active_spec.patterns]}") # Log patterns
-        else:
-            # Discover rules starting from walk_target_path downwards
-            context_files_in_path = _find_context_files_for_dir(current_dir_path, walk_target_path)
-            gitignore_files_in_path = _find_gitignore_files_for_dir(current_dir_path, walk_target_path)
-            if debug_explain:
-                logger.debug(f"Found context files for {current_dir_path} (relative to {walk_target_path}): {context_files_in_path}")
-                logger.debug(f"Found gitignore files for {current_dir_path} (relative to {walk_target_path}): {gitignore_files_in_path}")
+                logger.debug(f"Added {len(override_rules)} override rules as high-priority additions")
 
-            # Combine default rules, gitignore rules, and rules from discovered files
-            current_rules = list(DEFAULT_RULES)  # Start with defaults
-            for gi_path in gitignore_files_in_path:
-                current_rules.extend(load_gitignore_as_context_rules(gi_path))
-            for cf_path in context_files_in_path:
-                current_rules.extend(load_rules_from_file(cf_path))
+        # Add scoped exclusion patterns if applicable
+        if exclusion_parser:
+            scoped_patterns = exclusion_parser.get_scoped_patterns(current_dir_path, walk_target_path)
+            if scoped_patterns:
+                current_rules.extend(scoped_patterns)
+                if debug_explain:
+                    logger.debug(f"Applied {len(scoped_patterns)} scoped exclusion patterns to {current_dir_path}")
+                    for pattern in scoped_patterns:
+                        logger.debug(f"  Scoped pattern: {pattern}")
 
-            # Compile spec for this specific directory context
-            try:
-                relative_dir_desc = current_dir_path.relative_to(walk_target_path)
-                spec_source_desc = (
-                    f"Gitignore+context files up to ./{relative_dir_desc}"
-                    if str(relative_dir_desc) != '.'
-                    else "Gitignore+context files at root (relative to target)"
-                )
-            except ValueError:
-                spec_source_desc = f"Gitignore+context files up to {current_dir_path}"  # Fallback if current_dir is outside walk_target_path
+        # Compile spec for this specific directory context
+        # Build the source description
+        source_parts = ["Default", "Gitignore", "Contextfiles"]
+        if use_overrides:
+            source_parts.append("Overrides")
+        if exclusion_parser and scoped_patterns:
+            source_parts.append("ScopedExclusions")
+        source_type = "+".join(source_parts)
+        
+        try:
+            relative_dir_desc = current_dir_path.relative_to(walk_target_path)
+            if str(relative_dir_desc) == '.':
+                spec_source_desc = f"{source_type} at root"
+            else:
+                spec_source_desc = f"{source_type} up to ./{relative_dir_desc}"
+        except ValueError:
+            spec_source_desc = f"{source_type} up to {current_dir_path}"
 
-            if debug_explain:
-                logger.debug(f"Combined rules for {current_dir_path}: {current_rules}") # Log the combined rules list
-            active_spec = compile_spec_from_rules(current_rules, spec_source_desc)
-            if debug_explain:
-                logger.debug(f"Compiled spec for {current_dir_path} from {spec_source_desc} ({len(active_spec.patterns)} patterns)")
-                if active_spec:
-                     logger.debug(f"Context spec patterns: {[str(p.regex) for p in active_spec.patterns]}") # Log context patterns
-                # logger.debug(f"Path matching relative to: {path_match_root}") # This log is already present earlier
+        if debug_explain:
+            logger.debug(f"Combined rules for {current_dir_path}: {current_rules}") # Log the combined rules list
+        active_spec = compile_spec_from_rules(current_rules, spec_source_desc)
+        if debug_explain:
+            logger.debug(f"Compiled spec for {current_dir_path} from {spec_source_desc} ({len(active_spec.patterns)} patterns)")
+            if active_spec:
+                 logger.debug(f"Active spec patterns: {[str(p.regex) for p in active_spec.patterns]}") # Log context patterns
 
         if active_spec is None:
              logger.error(f"Could not determine active pathspec for directory {current_dir_path}. Skipping directory content.")

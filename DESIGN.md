@@ -75,13 +75,15 @@ This document details the internal design of the `jinni` MCP Server, `jinni` CLI
 *   **Rule Application Logic (`context_walker.py`):**
     1.  **Determine Target Root:** The `walk_target_path` (explicit target directory or project root) is established as the root for rule discovery and path matching.
     2.  **Override Check:** Determines if override rules are provided (CLI `--overrides <file>` or MCP `rules` argument).
-    3.  **Dynamic Spec Generation (During `os.walk`):**
-        *   **If Overrides Active:** Uses a single `PathSpec` compiled exclusively from the provided `override_rules`. All `.contextfiles` and built-in default rules are ignored.
-        *   **If No Overrides:** For each directory visited:
-            *   Finds all `.contextfiles` starting from `walk_target_path` down to the current directory.
-            *   Loads rules from these files.
-            *   Combines rules: `DEFAULT_RULES + rules_from_all_found_contextfiles` (respecting order: target root rules first, current dir rules last).
-            *   Compiles a new `PathSpec` object specific to this directory's context.
+    3.  **Dynamic Spec Generation (During `os.walk`):** For each directory visited:
+        *   Finds all `.contextfiles` and `.gitignore` files starting from `walk_target_path` down to the current directory.
+        *   Loads rules from these files.
+        *   Combines rules in order:
+            *   `DEFAULT_RULES` (common excludes like `.git/`, `node_modules/`, etc.)
+            *   `.gitignore` rules (converted to Jinni-style patterns)
+            *   `.contextfiles` rules (respecting order: target root rules first, current dir rules last)
+            *   **If overrides are provided:** Override rules are added as high-priority rules at the end
+        *   Compiles a new `PathSpec` object specific to this directory's context.
     4.  **Filtering Decision:**
         *   The active `PathSpec` for the current directory is used to match files and subdirectories.
         *   The path used for matching is calculated **relative to `walk_target_path`**.

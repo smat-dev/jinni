@@ -17,9 +17,9 @@ class ExclusionParser:
     # Common module/directory keywords and their typical patterns
     MODULE_PATTERNS = {
         "tests": ["**/test/**", "**/tests/**", "**/*_test/**", "**/*_tests/**", 
-                  "**/test_*/**", "**/*.test.*", "**/*.spec.*", "**/spec/**"],
+                  "**/test_*/**", "**/test_*", "**/*.test.*", "**/*.spec.*", "**/spec/**"],
         "test": ["**/test/**", "**/tests/**", "**/*_test/**", "**/*_tests/**", 
-                 "**/test_*/**", "**/*.test.*", "**/*.spec.*", "**/spec/**"],
+                 "**/test_*/**", "**/test_*", "**/*.test.*", "**/*.spec.*", "**/spec/**"],
         "vendor": ["vendor/**", "**/vendor/**", "third_party/**", "**/third_party/**",
                    "external/**", "**/external/**"],
         "vendors": ["vendor/**", "**/vendor/**", "third_party/**", "**/third_party/**",

@@ -86,9 +86,9 @@ def handle_list_token_command(args):
     # If we have any exclusions (including scoped ones), we need to use override mode
     if exclusion_patterns or exclusion_parser:
         if override_rules_list is None:
-            # When using exclusions without an override file, we need to start with default rules
-            from jinni.config_system import DEFAULT_RULES
-            override_rules_list = list(DEFAULT_RULES)
+            # When using exclusions without an override file, start with empty list
+            # The walker will apply defaults, gitignore, and contextfiles first
+            override_rules_list = []
         if exclusion_patterns:
             override_rules_list.extend(exclusion_patterns)
             logger.info(f"Added {len(exclusion_patterns)} exclusion patterns from CLI flags")
@@ -271,7 +271,7 @@ def handle_read_command(args):
                     line for line in (l.strip() for l in f)
                     if line and not line.startswith('#')
                 ]
-            logger.info(f"Loaded {len(override_rules_list)} override rules from {overrides_file}. .contextfiles will be ignored.")
+            logger.info(f"Loaded {len(override_rules_list)} override rules from {overrides_file}.")
         except Exception as e:
             print(f"Error reading overrides file '{overrides_file}': {e}", file=sys.stderr)
             sys.exit(1)
@@ -291,9 +291,9 @@ def handle_read_command(args):
     # If we have any exclusions (including scoped ones), we need to use override mode
     if exclusion_patterns or exclusion_parser:
         if override_rules_list is None:
-            # When using exclusions without an override file, we need to start with default rules
-            from jinni.config_system import DEFAULT_RULES
-            override_rules_list = list(DEFAULT_RULES)
+            # When using exclusions without an override file, start with empty list
+            # The walker will apply defaults, gitignore, and contextfiles first
+            override_rules_list = []
         if exclusion_patterns:
             override_rules_list.extend(exclusion_patterns)
             logger.info(f"Added {len(exclusion_patterns)} exclusion patterns from CLI flags")

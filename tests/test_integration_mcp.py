@@ -104,17 +104,17 @@ async def test_mcp_read_context_inline_rules(test_environment: Path):
     assert len(result.content) == 1 and isinstance(result.content[0], types.TextContent)
     stdout_text = result.content[0].text
 
-    # Assertions based on inline rules (override) + defaults:
+    # Assertions based on contextfiles + inline rules (override) + defaults:
     assert "```path=main.py" in stdout_text # Included by inline **/*.py
     assert "```path=src/utils.py" in stdout_text # Included by inline **/*.py
     assert "```path=src/nested/deep.py" in stdout_text # Included by inline **/*.py
     assert "```path=lib/somelib.py" in stdout_text # Included by inline **/*.py
 
     assert "```path=src/app.py" not in stdout_text # Excluded by inline !src/app.py
-    # Check files included by root file rules are NOT included now unless matched by inline *.py
-    assert "```path=file_root.txt" not in stdout_text # Excluded because .contextfiles are ignored by inline rules
-    assert "```path=README.md" not in stdout_text # Excluded because .contextfiles are ignored by inline rules
-    assert "```path=dir_a/important.log" not in stdout_text # .contextfiles ignored
+    # With the new design, .contextfiles are still respected when using inline rules
+    assert "```path=file_root.txt" in stdout_text # Included by .contextfiles
+    assert "```path=README.md" in stdout_text # Included by .contextfiles (*.md)
+    assert "```path=dir_a/important.log" in stdout_text # Included by .contextfiles in dir_a
 
 
 @pytest.mark.asyncio

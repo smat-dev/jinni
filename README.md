@@ -143,7 +143,7 @@ jinni [OPTIONS] [<PATH...>]
 *   **`-r <DIR>` / `--root <DIR>` (optional):** Specify the project root directory. If provided, rule discovery starts here, and output paths are relative to this directory. If omitted, the root is inferred from the common ancestor of the `<PATH...>` arguments (or CWD if only '.' is processed).
 *   **`--output <FILE>` / `-o <FILE>` (optional):** Write the output to `<FILE>` instead of printing to standard output.
 *   **`--list-only` / `-l` (optional):** Only list the relative paths of files that would be included.
-*   **`--overrides <FILE>` (optional):** Use rules from `<FILE>` instead of discovering `.contextfiles`.
+*   **`--overrides <FILE>` (optional):** Add rules from `<FILE>` as high-priority rules in addition to `.contextfiles` and `.gitignore`.
 *   **`--size-limit-mb <MB>` / `-s <MB>` (optional):** Override the maximum context size in MB.
 *   **`--debug-explain` (optional):** Print detailed inclusion/exclusion reasons to stderr and `jinni_debug.log`.
 *   **`--root <DIR>` / `-r <DIR>` (optional):** See above.
@@ -176,6 +176,8 @@ jinni --keep-only src,docs
 # Combine different exclusion types
 jinni --not tests --not-in src/experimental:wip --not-files "*.bak"
 ```
+
+**Note:** Exclusion commands (`--not*` flags) work in addition to existing `.gitignore` and `.contextfiles` rules. They further filter down what would otherwise be included.
 
 **MCP Examples:**
 

@@ -218,7 +218,7 @@ def test_read_context_hierarchy_sub_excludes(test_dir: Path):
     assert "```path=src/app.py" not in content # Excluded by sub rule
 
 def test_read_context_override_rules(test_dir: Path):
-    """Test using override rules, ignoring context files."""
+    """Test using override rules as additions to context files."""
     (test_dir / CONTEXT_FILENAME).write_text("**/*.py", encoding='utf-8') # File includes py
     override = ["src/app.py", "**/*.md", "**/*.py", "src/"] # Use recursive glob for markdown
     content = run_read_context_helper("project", test_dir.parent, override_rules=override) # Root is project, target is None
@@ -228,10 +228,11 @@ def test_read_context_override_rules(test_dir: Path):
     assert "```path=docs/index.md" in content # Included by override
     assert "```path=docs/config/options.md" in content # Included by override
 
-    # These should NOT be included as overrides replace defaults
+    # These are included by contextfiles and/or overrides
     assert "```path=main.py" in content # Included by **/*.py
     assert "```path=src/utils.py" in content # Included by **/*.py
-    assert "```path=config.yaml" not in content
+    # config.yaml is included by default '*' rule (not excluded by any rule)
+    assert "```path=config.yaml" in content
 
 def test_read_context_binary_skip(test_dir: Path):
     """Test binary files are skipped even if rules include them."""
@@ -375,6 +376,34 @@ def test_gitignore_respected_and_overridden(test_dir: Path):
     (test_dir / CONTEXT_FILENAME).write_text("lib/\n", encoding="utf-8")
     content = run_read_context_helper("project", test_dir.parent)
     assert "```path=lib/somelib.py" in content
+
+def test_gitignore_directory_pattern_applies_to_subdirs(test_dir: Path):
+    """Test that a directory pattern like 'dirtobeignored/' in top-level .gitignore applies to subdirectories."""
+    # Create the directory structure
+    subdir = test_dir / "subdir"
+    subdir.mkdir()
+    ignored_in_root = test_dir / "dirtobeignored"
+    ignored_in_root.mkdir()
+    ignored_in_subdir = subdir / "dirtobeignored"
+    ignored_in_subdir.mkdir()
+    
+    # Create test files
+    (ignored_in_root / "file.txt").write_text("Should be ignored", encoding="utf-8")
+    (ignored_in_subdir / "file.txt").write_text("Should also be ignored", encoding="utf-8")
+    (subdir / "included.txt").write_text("Should be included", encoding="utf-8")
+    
+    # Create .gitignore with directory pattern
+    (test_dir / ".gitignore").write_text("dirtobeignored/\n", encoding="utf-8")
+    
+    # Run jinni and check results
+    content = run_read_context_helper("project", test_dir.parent)
+    
+    # Files in dirtobeignored/ at any level should be excluded
+    assert "```path=dirtobeignored/file.txt" not in content
+    assert "```path=subdir/dirtobeignored/file.txt" not in content
+    
+    # But other files should be included
+    assert "```path=subdir/included.txt" in content
 
 # Test removed as project_root is now mandatory
 # def test_read_context_project_root_default(test_dir: Path):
