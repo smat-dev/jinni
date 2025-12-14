@@ -64,7 +64,7 @@ _BAD_UNC_CHARS = r'<>:"/\\|?*%'
 _UNC_PREFIX = r'\\wsl$'  # Corrected raw string definition
 
 def _build_unc_path(distro: str, linux_path: str) -> str:
-    """
+    r"""
     Helper function to build the WSL UNC path using pathlib.
     Always emits paths in the \\wsl$\Distro\... format.
     Handles illegal characters in distro name.
@@ -679,8 +679,14 @@ def _translate_wsl_path(path_str: str) -> str:
             ensure_no_nul(candidate_unc_path, "UNC path from manual fallback")
 
             # Probe only the share root; individual files may lag.
+            # Wrap in try/except for Python 3.11 compatibility - exists() raises
+            # OSError on inaccessible network paths in 3.11, returns False in 3.12+
             share_root = Path(fr"\\wsl$\{assumed_distro}")
-            if not share_root.exists():
+            try:
+                share_root_exists = share_root.exists()
+            except OSError:
+                share_root_exists = False
+            if not share_root_exists:
                 logger.debug(
                     "UNC share root %s still not visible — continuing anyway",
                     share_root,
