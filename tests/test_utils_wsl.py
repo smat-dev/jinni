@@ -31,8 +31,23 @@ if platform.system() == "Windows":
 
 # --- Test Setup ---
 
-# Mark all tests in this module to be skipped if not on Windows
-pytestmark = pytest.mark.skipif(platform.system() != "Windows", reason="WSL tests require Windows host")
+def _is_wsl_available():
+    """Check if WSL is actually available on this Windows system."""
+    if platform.system() != "Windows":
+        return False
+    try:
+        # Try to access the WSL root - this will fail on Windows without WSL
+        wsl_root = Path(r"\\wsl$")
+        # exists() can raise OSError if the network path is unavailable
+        return wsl_root.exists()
+    except OSError:
+        return False
+
+# Mark all tests in this module to be skipped if not on Windows with WSL available
+pytestmark = pytest.mark.skipif(
+    platform.system() != "Windows" or not _is_wsl_available(),
+    reason="WSL tests require Windows host with WSL available"
+)
 
 # ---------- paths used everywhere ----------
 CI_WSL_EXISTING_FILE_POSIX = "/home/runner/testproj/hello.txt"
