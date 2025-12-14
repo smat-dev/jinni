@@ -204,8 +204,24 @@ def run_jinni_cli(args: List[str]):
         logger.error(f"CLI Stderr:\n{e.stderr}")
         raise
 
-async def run_mcp_tool_call(tool_name: str, arguments: dict):
-   """Helper function to run the jinni MCP server and call a tool."""
+async def run_mcp_tool_call(tool_name: str, arguments: dict = None, **kwargs):
+   """Helper function to run the jinni MCP server and call a tool.
+
+   Args:
+       tool_name: Name of the tool to call
+       arguments: Dict of arguments (for backwards compatibility)
+       **kwargs: Tool arguments passed directly to the MCP tool
+
+   Supports two calling conventions:
+       - run_mcp_tool_call("read_context", {"project_root": "...", ...})  # dict style
+       - run_mcp_tool_call("read_context", project_root="...", ...)      # kwargs style
+   """
+   # Support both dict and kwargs calling conventions
+   if arguments is not None:
+       effective_args = arguments
+   else:
+       effective_args = kwargs
+
    server_params = StdioServerParameters(
        command=PYTHON_EXECUTABLE,
        args=["-m", "jinni.server"], # Run server as module
@@ -219,9 +235,17 @@ async def run_mcp_tool_call(tool_name: str, arguments: dict):
                logger.debug("ClientSession created. Initializing...")
                init_response = await session.initialize()
                logger.debug(f"MCP Session Initialized: {init_response}")
-               logger.debug(f"Calling tool '{tool_name}' with arguments: {arguments}")
-               result = await session.call_tool(tool_name, arguments=arguments)
+               logger.debug(f"Calling tool '{tool_name}' with arguments: {effective_args}")
+               result = await session.call_tool(tool_name, arguments=effective_args)
                logger.debug(f"Tool '{tool_name}' returned result: {type(result)}")
+               # For new-style calls (kwargs), extract text content from the result
+               if arguments is None and hasattr(result, 'content') and result.content:
+                   # Combine all text content from the result
+                   text_parts = []
+                   for content_item in result.content:
+                       if hasattr(content_item, 'text'):
+                           text_parts.append(content_item.text)
+                   return '\n'.join(text_parts)
                return result
    except Exception as e:
        logger.error(f"Error during MCP client communication or tool call: {e}", exc_info=True)

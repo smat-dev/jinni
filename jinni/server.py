@@ -29,6 +29,38 @@ from jinni.utils import ESSENTIAL_USAGE_DOC, _translate_wsl_path, ensure_no_nul 
 # Constants like DEFAULT_SIZE_LIMIT_MB might be needed if used directly, otherwise remove.
 # Let's assume they are handled within core_logic now.
 
+# --- Defensive JSON Parsing Helpers ---
+def _coerce_to_list(value: Any, param_name: str) -> List[str]:
+    """
+    Coerce a value to a list of strings for Cursor MCP host compatibility.
+
+    Some MCP hosts (notably Cursor) may stringify list parameters.
+    This helper safely coerces such values back to lists.
+    """
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        # Try to parse stringified JSON
+        stripped = value.strip()
+        if stripped.startswith('['):
+            try:
+                parsed = json.loads(stripped)
+                if isinstance(parsed, list):
+                    logger.warning(f"Parameter '{param_name}' was stringified JSON; coerced to list")
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+        # Single string value - wrap in list if non-empty
+        if stripped:
+            logger.warning(f"Parameter '{param_name}' was a string; wrapped in list")
+            return [stripped]
+        return []
+    logger.warning(f"Parameter '{param_name}' has unexpected type {type(value)}; returning empty list")
+    return []
+
+
 # --- Server Definition ---
 server = FastMCP("jinni")
 
@@ -69,14 +101,26 @@ async def usage() -> str:
 
 async def read_context(
     project_root: str = Field(description="**MUST BE ABSOLUTE PATH**. The absolute path to the project root directory."),
-    targets: List[str] = Field(description="**Mandatory**. List of paths (absolute or relative to CWD) to specific files or directories within the project root to process. Must be a JSON array of strings. If empty (`[]`), the entire `project_root` is processed."),
-    rules: List[str] = Field(description="**Mandatory**. List of inline filtering rules. Provide `[]` if no specific rules are needed (uses defaults). It is strongly recommended to consult the `usage` tool documentation before providing a non-empty list."),
-    list_only: bool = False,
-    size_limit_mb: Optional[int] = None,
-    debug_explain: bool = False,
-    exclusions: Optional[dict] = Field(default=None, description="Optional exclusion configuration. Object with 'global' (list of keywords), 'scoped' (object mapping paths to keyword lists), and 'patterns' (list of file patterns) fields."),
+    targets: List[str] = Field(default_factory=list, description="List of paths (absolute or relative to CWD) to specific files or directories within the project root to process. If empty (`[]`), the entire `project_root` is processed."),
+    rules: List[str] = Field(default_factory=list, description="List of inline filtering rules. Provide `[]` if no specific rules are needed (uses defaults). It is strongly recommended to consult the `usage` tool documentation before providing a non-empty list."),
+    list_only: bool = Field(default=False, description="If true, only list discovered files."),
+    size_limit_mb: int = Field(default=0, description="Override max size in MB. Use 0 for default."),
+    debug_explain: bool = Field(default=False, description="Emit inclusion/exclusion reasoning."),
+    # Flattened exclusion parameters (Cursor-safe - no nested objects)
+    not_keywords: List[str] = Field(default_factory=list, description="Global exclusions by keyword (equiv. to --not). E.g., ['tests', 'vendor'] excludes test and vendor directories."),
+    not_in: List[str] = Field(default_factory=list, description="Scoped exclusions in 'path:kw1,kw2' format (equiv. to --not-in). E.g., ['src:legacy,experimental'] excludes legacy and experimental only within src/."),
+    not_files: List[str] = Field(default_factory=list, description="File pattern exclusions (equiv. to --not-files). E.g., ['*.test.js', '*.spec.ts'] excludes test files."),
 ) -> str:
     logger.info("--- read_context tool invoked ---")
+
+    # --- Defensive parsing for stringified JSON (Cursor compatibility) ---
+    # Some MCP hosts may stringify list parameters; coerce them back to lists
+    targets = _coerce_to_list(targets, "targets")
+    rules = _coerce_to_list(rules, "rules")
+    not_keywords = _coerce_to_list(not_keywords, "not_keywords")
+    not_in = _coerce_to_list(not_in, "not_in")
+    not_files = _coerce_to_list(not_files, "not_files")
+
     # Translate incoming paths *before* any validation or Path object creation
     translated_project_root = _translate_wsl_path(project_root)
     translated_targets = [_translate_wsl_path(t) for t in targets]
@@ -182,32 +226,25 @@ async def read_context(
         except ValueError:
              raise ValueError(f"Tool project_root '{resolved_project_root_path}' is outside the allowed server root '{SERVER_ROOT_PATH}'")
 
-    # --- Process Exclusions ---
+    # --- Process Exclusions (using flat parameters) ---
     exclusion_parser = None
     exclusion_patterns = []
-    if exclusions:
+    has_exclusions = not_keywords or not_in or not_files
+
+    if has_exclusions:
         from jinni.exclusion_parser import ExclusionParser
-        
-        # Extract exclusion components
-        global_keywords = exclusions.get('global', [])
-        scoped_exclusions = exclusions.get('scoped', {})
-        file_patterns = exclusions.get('patterns', [])
-        
-        # Convert scoped dict to list format expected by ExclusionParser
-        scoped_list = []
-        for path, keywords in scoped_exclusions.items():
-            if isinstance(keywords, list):
-                scoped_list.append(f"{path}:{','.join(keywords)}")
-        
-        # Create exclusion parser
+
         parser = ExclusionParser()
-        
-        # Parse different exclusion types
-        exclusion_patterns.extend(parser.parse_not(global_keywords))
-        exclusion_patterns.extend(parser.parse_not_in(scoped_list))
-        exclusion_patterns.extend(parser.parse_not_files(file_patterns))
-        
-        if exclusion_patterns:
+
+        # Parse different exclusion types from flat parameters
+        if not_keywords:
+            exclusion_patterns.extend(parser.parse_not(not_keywords))
+        if not_in:
+            parser.scoped_exclusions = parser.parse_not_in(not_in)  # Capture return value
+        if not_files:
+            exclusion_patterns.extend(parser.parse_not_files(not_files))
+
+        if exclusion_patterns or parser.scoped_exclusions:
             exclusion_parser = parser
             logger.info(f"Configured {len(exclusion_patterns)} exclusion patterns")
 
@@ -257,12 +294,14 @@ async def read_context(
             effective_rules.extend(exclusion_patterns)
         
         # Call the core logic function
+        # Convert size_limit_mb=0 to None (0 means "use default")
+        effective_size_limit = size_limit_mb if size_limit_mb > 0 else None
         result_content = core_read_context(
             target_paths_str=effective_target_paths_str,
             project_root_str=resolved_project_root_path_str, # Pass the translated, validated root
             override_rules=effective_rules,
             list_only=list_only,
-            size_limit_mb=size_limit_mb,
+            size_limit_mb=effective_size_limit,
             debug_explain=debug_explain, # Pass flag down
             # include_size_in_list is False by default in core_logic if not passed
             exclusion_parser=exclusion_parser # Pass exclusion parser for scoped exclusions

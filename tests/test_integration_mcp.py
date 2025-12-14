@@ -309,40 +309,40 @@ async def test_mcp_read_context_target_list_invalid(test_environment: Path):
     # No need to check stdout_text as it's an error result
 
 
-# --- Tests for mandatory arguments ---
+# --- Tests for optional arguments with defaults ---
 
 @pytest.mark.asyncio
-async def test_mcp_read_context_missing_targets_raises_error(test_environment: Path):
-    """Test MCP read_context raises error when mandatory 'targets' is missing."""
+async def test_mcp_read_context_without_targets_uses_project_root(test_environment: Path):
+    """Test MCP read_context defaults to project root when targets is omitted."""
     test_dir = test_environment
     tool_name = "read_context"
-    # Call without the 'targets' argument - should raise error
-    arguments = { "project_root": str(test_dir), "rules": [] } # Provide mandatory rules
+    # Call without the 'targets' argument - should use project root as default
+    arguments = { "project_root": str(test_dir), "rules": [] }
     result = await run_mcp_tool_call(tool_name, arguments)
 
     assert isinstance(result, types.CallToolResult)
-    assert result.isError # Should be an error
+    assert not result.isError  # Should succeed
     assert len(result.content) == 1 and isinstance(result.content[0], types.TextContent)
-    error_text = result.content[0].text
-    # Check that the error message mentions the missing field
-    assert "targets" in error_text.lower() and ("required" in error_text.lower() or "missing" in error_text.lower())
+    stdout_text = result.content[0].text
+    # Should include files from the project root
+    assert "```path=" in stdout_text
 
 
 @pytest.mark.asyncio
-async def test_mcp_read_context_missing_rules_raises_error(test_environment: Path):
-    """Test MCP read_context raises error when mandatory 'rules' is missing."""
+async def test_mcp_read_context_without_rules_uses_defaults(test_environment: Path):
+    """Test MCP read_context uses default rules when rules is omitted."""
     test_dir = test_environment
     tool_name = "read_context"
-    # Call without the 'rules' argument - should raise error
-    arguments = { "project_root": str(test_dir), "targets": [str(test_dir)] } # Provide mandatory targets
+    # Call without the 'rules' argument - should use default rules
+    arguments = { "project_root": str(test_dir), "targets": [str(test_dir)] }
     result = await run_mcp_tool_call(tool_name, arguments)
 
     assert isinstance(result, types.CallToolResult)
-    assert result.isError # Should be an error
+    assert not result.isError  # Should succeed
     assert len(result.content) == 1 and isinstance(result.content[0], types.TextContent)
-    error_text = result.content[0].text
-    # Check that the error message mentions the missing field
-    assert "rules" in error_text.lower() and ("required" in error_text.lower() or "missing" in error_text.lower())
+    stdout_text = result.content[0].text
+    # Should include files using default rules
+    assert "```path=" in stdout_text
 
 
 @pytest.mark.asyncio
